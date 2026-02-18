@@ -1,0 +1,90 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * {
+    @apply border-white/10;
+  }
+  
+  body {
+    font-family: 'Inter', system-ui, sans-serif;
+    @apply bg-surface-950;
+  }
+}
+
+@layer components {
+  .glass-panel {
+    @apply bg-glass-medium backdrop-blur-xl rounded-2xl border border-white/10;
+  }
+  
+  .glass-card {
+    @apply bg-glass-light backdrop-blur-lg rounded-xl border border-white/5;
+  }
+  
+  .glass-input {
+    @apply bg-glass-dark backdrop-blur-md rounded-lg border border-white/10 
+           text-white placeholder:text-white/40
+           focus:outline-none focus:ring-2 focus:ring-accent-primary/50 focus:border-accent-primary/30
+           transition-all duration-200;
+  }
+  
+  .glass-button {
+    @apply bg-accent-primary/20 hover:bg-accent-primary/30 
+           backdrop-blur-md rounded-lg border border-accent-primary/30
+           text-accent-primary hover:text-white
+           transition-all duration-200 hover:shadow-glow
+           active:scale-95;
+  }
+  
+  .gradient-text {
+    @apply bg-gradient-to-r from-accent-primary via-accent-secondary to-accent-primary 
+           bg-clip-text text-transparent bg-[length:200%_auto];
+  }
+  
+  .gradient-border {
+    @apply relative;
+  }
+  
+  .gradient-border::before {
+    content: '';
+    @apply absolute -inset-0.5 bg-gradient-to-r from-accent-primary to-accent-secondary 
+           rounded-2xl opacity-30 blur-sm -z-10;
+  }
+  
+  .shimmer {
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.1) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    background-size: 200% 100%;
+    animation: shimmer 2s linear infinite;
+  }
+}
+
+@layer utilities {
+  .scrollbar-thin {
+    scrollbar-width: thin;
+    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb {
+    background: rgba(255, 255, 255, 0.1);
+    border-radius: 3px;
+  }
+  
+  .scrollbar-thin::-webkit-scrollbar-thumb:hover {
+    background: rgba(255, 255, 255, 0.2);
+  }
+}
