@@ -28,8 +28,8 @@ export default function FileUpload({ documents, uploading, errors, onUpload, onD
 
   return (
     <div className="space-y-4">
-      <motion.div {...getRootProps()} whileHover={{ scale: 1.01 }} whileTap={{ scale: 0.99 }}
-        className={`relative cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all duration-300 ${
+      <div {...getRootProps()}
+        className={`relative cursor-pointer rounded-2xl border-2 border-dashed p-8 text-center transition-all duration-300 hover:scale-[1.01] active:scale-[0.99] ${
           isDragActive ? "border-violet-400/60 bg-violet-500/10" : "border-white/10 hover:border-white/20 bg-white/[0.02]"}`}>
         <input {...getInputProps()} />
         <motion.div animate={isDragActive ? { y: -4, scale: 1.1 } : { y: 0, scale: 1 }}>
@@ -40,7 +40,7 @@ export default function FileUpload({ documents, uploading, errors, onUpload, onD
             : <>Drag & drop PDFs here, or <span className="text-violet-400 underline">browse</span></>}
         </p>
         <p className="text-xs text-white/25 mt-1">PDF files up to 50MB</p>
-      </motion.div>
+      </div>
 
       <AnimatePresence>
         {Array.from(uploading.entries()).map(([name, isUp]) => isUp ? (
