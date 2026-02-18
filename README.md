@@ -1,49 +1,160 @@
-# 🎓 ScholarSync — AI-Powered Study Assistant
+<div align="center">
+
+# ScholarSync
+
+### AI-Powered PDF Study Assistant
 
 Upload your PDFs. Ask questions across all your documents. Get cited answers with page numbers in seconds.
 
+[![MIT License](https://img.shields.io/badge/License-MIT-violet.svg)](LICENSE)
+[![GitHub Stars](https://img.shields.io/github/stars/lekhanpro/scholarsync?style=flat&color=violet)](https://github.com/lekhanpro/scholarsync/stargazers)
+[![GitHub Forks](https://img.shields.io/github/forks/lekhanpro/scholarsync?style=flat&color=indigo)](https://github.com/lekhanpro/scholarsync/network/members)
+[![GitHub Issues](https://img.shields.io/github/issues/lekhanpro/scholarsync?style=flat)](https://github.com/lekhanpro/scholarsync/issues)
+[![PRs Welcome](https://img.shields.io/badge/PRs-welcome-brightgreen.svg)](CONTRIBUTING.md)
+[![Built with TypeScript](https://img.shields.io/badge/TypeScript-5.6-blue?logo=typescript&logoColor=white)](https://www.typescriptlang.org/)
+[![Built with React](https://img.shields.io/badge/React-18-61DAFB?logo=react&logoColor=white)](https://react.dev/)
+[![Powered by Groq](https://img.shields.io/badge/Powered_by-Groq-orange)](https://groq.com/)
+[![Supabase](https://img.shields.io/badge/Supabase-pgvector-3ECF8E?logo=supabase&logoColor=white)](https://supabase.com/)
+
+</div>
+
+---
+
+## About
+
+ScholarSync is a full-stack Retrieval-Augmented Generation (RAG) application that transforms your PDF documents into an intelligent, searchable knowledge base. Built for students, researchers, and anyone who works with large volumes of documents, ScholarSync lets you upload multiple PDFs, ask natural language questions across all of them, and receive accurate, cited answers with exact page references.
+
+The system parses your PDFs, splits them into semantic chunks, generates vector embeddings using HuggingFace models, stores them in a Supabase pgvector database, and uses Groq's lightning-fast LLaMA 3.3 70B model to generate answers grounded in your actual documents.
+
+## Features
+
+- **Multi-PDF Upload** -- Drag and drop multiple lecture notes, textbooks, and papers. Each PDF is parsed and indexed automatically.
+- **Semantic Search** -- Documents are chunked with LangChain's RecursiveCharacterTextSplitter and embedded into 384-dimensional vectors for meaning-based retrieval.
+- **Cross-Document Queries** -- Ask questions that span multiple documents. Compare definitions, synthesize information, and find connections across your entire library.
+- **Cited Answers** -- Every response includes source citations with the exact filename and page number, so you can verify and dive deeper.
+- **Groq-Powered Speed** -- Answers generated in under 2 seconds using LLaMA 3.3 70B on Groq's inference engine.
+- **Conversation History** -- Multi-turn chat that maintains context across questions for natural follow-up queries.
+- **Modern UI** -- Glassmorphism design with smooth Framer Motion animations, dark mode, and responsive layout.
+- **Document Management** -- View, manage, and delete uploaded documents. Track processing status in real time.
+
+## Screenshots
+
+> Screenshots will be added here. To contribute screenshots, see [CONTRIBUTING.md](CONTRIBUTING.md).
+
+```
+[ Landing Page ]  [ Dashboard ]  [ Chat Interface ]  [ Source Citations ]
+```
+
+## Architecture
+
+```
+                          ScholarSync Architecture
+ ============================================================================
+
+  User Browser (React SPA)
+       |
+       |  HTTP / REST
+       v
+  Express API Server (Node.js)
+       |
+       |--- POST /api/upload -----> PDF Parsing (pdf-parse)
+       |                                 |
+       |                                 v
+       |                           Text Chunking (LangChain)
+       |                                 |
+       |                                 v
+       |                           Embedding (HuggingFace API)
+       |                                 |
+       |                                 v
+       |                           Store in Supabase pgvector
+       |
+       |--- POST /api/chat ------> Embed Query (HuggingFace)
+       |                                 |
+       |                                 v
+       |                           Similarity Search (pgvector)
+       |                                 |
+       |                                 v
+       |                           Generate Answer (Groq LLaMA 3.3 70B)
+       |                                 |
+       |                                 v
+       |                           Return cited response
+       |
+       |--- GET /api/documents --> List documents from Supabase
+       |--- DELETE /api/documents/:id --> Remove document + chunks
+       |--- GET /api/health -----> Health check
+
+ ============================================================================
+```
+
 ## Tech Stack
 
-- **Frontend:** React 18 + TypeScript + Tailwind CSS + Framer Motion
-- **Backend:** Node.js + Express + TypeScript
-- **AI/LLM:** Groq API (LLaMA 3.3 70B)
-- **Embeddings:** HuggingFace Inference API (all-MiniLM-L6-v2, 384-dim)
-- **Vector DB:** Supabase pgvector
-- **PDF Parsing:** pdf-parse + LangChain RecursiveCharacterTextSplitter
+| Category | Technology | Purpose |
+|----------|-----------|---------|
+| **Frontend** | React 18, TypeScript | Component-based UI with type safety |
+| **Styling** | Tailwind CSS, Framer Motion | Utility-first CSS with smooth animations |
+| **Backend** | Node.js, Express, TypeScript | REST API server |
+| **LLM** | Groq API (LLaMA 3.3 70B) | Fast, accurate answer generation |
+| **Embeddings** | HuggingFace Inference API | all-MiniLM-L6-v2 model, 384-dim vectors |
+| **Vector DB** | Supabase pgvector | PostgreSQL with vector similarity search |
+| **PDF Parsing** | pdf-parse | Extract text content from PDF files |
+| **Text Splitting** | LangChain | RecursiveCharacterTextSplitter for semantic chunking |
+| **Build Tools** | Vite, tsx | Fast development and build tooling |
 
-## Setup
+## Getting Started
 
-### 1. Clone & Install
+### Prerequisites
+
+- **Node.js** >= 18.0.0
+- **npm** >= 9.0.0
+- A **Groq** account ([console.groq.com](https://console.groq.com/keys))
+- A **Supabase** project ([supabase.com](https://supabase.com/))
+- A **HuggingFace** account ([huggingface.co](https://huggingface.co/settings/tokens))
+
+### 1. Clone the Repository
 
 ```bash
 git clone https://github.com/lekhanpro/scholarsync.git
 cd scholarsync
+```
+
+### 2. Install Dependencies
+
+```bash
+# Install root dependencies (concurrently)
 npm install
+
+# Install client dependencies
 cd client && npm install && cd ..
+
+# Install server dependencies
 cd server && npm install && cd ..
 ```
 
-### 2. Environment Variables
+### 3. Set Up Environment Variables
 
-Copy `.env.example` to `.env` and fill in your keys:
+Copy the example environment file and fill in your API keys:
 
 ```bash
 cp .env.example .env
 ```
 
-| Variable | Where to get it |
-|---|---|
-| `GROQ_API_KEY` | https://console.groq.com/keys |
-| `SUPABASE_URL` | Supabase Dashboard → Settings → API |
-| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Dashboard → Settings → API |
-| `HF_API_KEY` | https://huggingface.co/settings/tokens |
+| Variable | Description | Where to Get It |
+|----------|-------------|-----------------|
+| `GROQ_API_KEY` | API key for Groq LLM inference | [console.groq.com/keys](https://console.groq.com/keys) |
+| `SUPABASE_URL` | Your Supabase project URL | Supabase Dashboard > Settings > API |
+| `SUPABASE_ANON_KEY` | Supabase anonymous/public key | Supabase Dashboard > Settings > API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side) | Supabase Dashboard > Settings > API |
+| `HF_API_KEY` | HuggingFace Inference API token | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
+| `PORT` | Server port (default: `3001`) | Optional |
+| `NODE_ENV` | Environment (`development` or `production`) | Optional |
+| `CLIENT_URL` | Frontend URL for CORS in production | Required for production |
 
-### 3. Supabase Setup
+### 4. Set Up Supabase
 
-Run this SQL in your Supabase SQL Editor:
+Run the following SQL in your Supabase SQL Editor to create the required tables and functions:
 
 ```sql
--- Enable pgvector
+-- Enable pgvector extension
 create extension if not exists vector;
 
 -- Documents table
@@ -113,15 +224,148 @@ end;
 $$;
 ```
 
-### 4. Run
+### 5. Run the Application
 
 ```bash
 npm run dev
 ```
 
-- Frontend: http://localhost:5173
-- Backend: http://localhost:3001
+This starts both the frontend and backend concurrently:
+
+- **Frontend:** [http://localhost:5173](http://localhost:5173)
+- **Backend:** [http://localhost:3001](http://localhost:3001)
+
+## API Endpoints
+
+| Method | Endpoint | Description |
+|--------|----------|-------------|
+| `POST` | `/api/upload` | Upload a PDF file (multipart form, field: `pdf`) |
+| `GET` | `/api/documents` | List all uploaded documents |
+| `DELETE` | `/api/documents/:id` | Delete a document and its chunks |
+| `POST` | `/api/chat` | Send a chat query (JSON body: `{ query, documentIds?, conversationHistory? }`) |
+| `GET` | `/api/health` | Health check endpoint |
+
+### Chat Request Example
+
+```json
+{
+  "query": "What is the definition of pointers?",
+  "documentIds": ["uuid-1", "uuid-2"],
+  "conversationHistory": [
+    { "role": "user", "content": "Previous question" },
+    { "role": "assistant", "content": "Previous answer" }
+  ]
+}
+```
+
+### Chat Response Example
+
+```json
+{
+  "answer": "Based on your documents, a pointer is a variable that stores a memory address...",
+  "sources": [
+    {
+      "filename": "lecture_notes.pdf",
+      "page_number": 12,
+      "excerpt": "A pointer is a variable that stores...",
+      "similarity": 0.89
+    }
+  ],
+  "model": "llama-3.3-70b-versatile"
+}
+```
+
+## Project Structure
+
+```
+scholarsync/
+├── client/                  # React frontend
+│   ├── public/              # Static assets
+│   ├── src/
+│   │   ├── components/      # Reusable UI components
+│   │   │   ├── ChatMessage.tsx
+│   │   │   ├── FileUpload.tsx
+│   │   │   ├── GlassLayout.tsx
+│   │   │   ├── LoadingDots.tsx
+│   │   │   ├── Navbar.tsx
+│   │   │   └── SourceBadge.tsx
+│   │   ├── hooks/           # Custom React hooks
+│   │   │   ├── useChat.ts
+│   │   │   └── useFileUpload.ts
+│   │   ├── pages/           # Page components
+│   │   │   ├── Dashboard.tsx
+│   │   │   └── Landing.tsx
+│   │   ├── services/        # API client
+│   │   │   └── api.ts
+│   │   ├── types/           # TypeScript type definitions
+│   │   │   └── index.ts
+│   │   ├── App.tsx          # Root component with routing
+│   │   ├── index.css        # Global styles
+│   │   └── main.tsx         # Entry point
+│   ├── index.html
+│   ├── tailwind.config.ts
+│   ├── tsconfig.json
+│   └── vite.config.ts
+├── server/                  # Express backend
+│   ├── src/
+│   │   ├── config/          # Service configurations
+│   │   │   ├── groq.ts
+│   │   │   └── supabase.ts
+│   │   ├── controllers/     # Route handlers
+│   │   │   ├── chatController.ts
+│   │   │   └── uploadController.ts
+│   │   ├── middleware/       # Express middleware
+│   │   │   └── errorHandler.ts
+│   │   ├── routes/          # Route definitions
+│   │   │   ├── chatRoutes.ts
+│   │   │   └── uploadRoutes.ts
+│   │   ├── services/        # Business logic
+│   │   │   ├── embeddingService.ts
+│   │   │   ├── pdfService.ts
+│   │   │   └── ragService.ts
+│   │   └── index.ts         # Server entry point
+│   ├── uploads/             # Temporary PDF storage
+│   ├── tsconfig.json
+│   └── package.json
+├── .env.example             # Environment variable template
+├── .github/                 # GitHub templates and CI
+│   ├── ISSUE_TEMPLATE/
+│   ├── PULL_REQUEST_TEMPLATE.md
+│   └── workflows/
+├── package.json             # Root package with dev scripts
+├── vercel.json              # Vercel deployment config
+├── CONTRIBUTING.md          # Contributor guide
+├── CODE_OF_CONDUCT.md       # Code of conduct
+├── LICENSE                  # MIT License
+└── README.md                # This file
+```
+
+## Contributing
+
+Contributions are welcome! Please read our [Contributing Guide](CONTRIBUTING.md) to learn about our development process, how to propose bug fixes and improvements, and how to build and test your changes.
+
+Please note that this project is released with a [Code of Conduct](CODE_OF_CONDUCT.md). By participating in this project you agree to abide by its terms.
 
 ## License
 
-MIT
+This project is licensed under the MIT License. See the [LICENSE](LICENSE) file for details.
+
+## Acknowledgments
+
+- [Groq](https://groq.com/) -- For providing lightning-fast LLM inference
+- [Supabase](https://supabase.com/) -- For the PostgreSQL database with pgvector support
+- [HuggingFace](https://huggingface.co/) -- For the embedding models and Inference API
+- [LangChain](https://www.langchain.com/) -- For the text splitting utilities
+- [Tailwind CSS](https://tailwindcss.com/) -- For the utility-first CSS framework
+- [Framer Motion](https://www.framer.com/motion/) -- For the animation library
+- [Lucide](https://lucide.dev/) -- For the icon set
+
+---
+
+<div align="center">
+
+Built by [lekhanpro](https://github.com/lekhanpro)
+
+If this project helped you, consider giving it a star on GitHub.
+
+</div>
