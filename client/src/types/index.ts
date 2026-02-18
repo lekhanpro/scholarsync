@@ -1,39 +1,32 @@
 export interface Document {
-  id: string
-  file_name: string
-  total_chunks: number
-  total_pages: number
-  status: string
-  created_at: string
+  id: string;
+  filename: string;
+  original_name: string;
+  total_pages: number;
+  total_chunks: number;
+  status: "processing" | "ready" | "error";
+  error_message?: string;
+  created_at: string;
 }
 
-export interface Message {
-  id: string
-  role: 'user' | 'assistant' | 'system'
-  content: string
-  timestamp: Date
-  citations?: Citation[]
+export interface ChatMessage {
+  id: string;
+  role: "user" | "assistant";
+  content: string;
+  sources?: Source[];
+  model?: string;
+  timestamp: Date;
 }
 
-export interface Citation {
-  fileName: string
-  pageNumber: number
-  excerpt: string
+export interface Source {
+  filename: string;
+  page_number: number;
+  excerpt: string;
+  similarity: number;
 }
 
 export interface ChatResponse {
-  answer: string
-  citations: Citation[]
-  confidence: number
-}
-
-export interface UploadResponse {
-  message: string
-  document: Document
-}
-
-export interface UploadError {
-  error: string
-  details?: string
-  documentId?: string
+  answer: string;
+  sources: Source[];
+  model: string;
 }

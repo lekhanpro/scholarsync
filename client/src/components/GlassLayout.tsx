@@ -1,43 +1,32 @@
-import React, { ReactNode } from 'react'
-import { motion } from 'framer-motion'
+import { motion } from "framer-motion";
+import { ReactNode } from "react";
 
-interface GlassLayoutProps {
-  children: ReactNode
-}
+interface GlassLayoutProps { children: ReactNode; }
 
-const GlassLayout: React.FC<GlassLayoutProps> = ({ children }) => {
+export default function GlassLayout({ children }: GlassLayoutProps) {
   return (
-    <div className="min-h-screen relative overflow-hidden bg-surface-950">
-      <div className="fixed inset-0 z-0">
-        <div className="absolute top-0 left-1/4 w-96 h-96 bg-accent-primary/20 rounded-full blur-[128px]" />
-        <div className="absolute bottom-1/4 right-1/4 w-80 h-80 bg-accent-secondary/15 rounded-full blur-[100px]" />
-        <div className="absolute top-1/2 left-1/2 w-64 h-64 bg-accent-primary/10 rounded-full blur-[80px]" />
-        
-        <svg className="absolute inset-0 w-full h-full opacity-20" xmlns="http://www.w3.org/2000/svg">
-          <defs>
-            <pattern id="grid" width="40" height="40" patternUnits="userSpaceOnUse">
-              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="rgba(255,255,255,0.03)" strokeWidth="1"/>
-            </pattern>
-          </defs>
-          <rect width="100%" height="100%" fill="url(#grid)" />
-        </svg>
+    <div className="relative min-h-screen bg-[#030014] overflow-hidden">
+      <div className="fixed inset-0 pointer-events-none">
+        <motion.div
+          animate={{ x: [0, 100, -50, 0], y: [0, -80, 60, 0], scale: [1, 1.2, 0.9, 1] }}
+          transition={{ duration: 20, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-[-20%] left-[-10%] w-[600px] h-[600px] rounded-full bg-purple-600/20 blur-[120px]"
+        />
+        <motion.div
+          animate={{ x: [0, -80, 40, 0], y: [0, 100, -60, 0], scale: [1, 0.8, 1.1, 1] }}
+          transition={{ duration: 25, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute top-[30%] right-[-15%] w-[500px] h-[500px] rounded-full bg-indigo-500/15 blur-[100px]"
+        />
+        <motion.div
+          animate={{ x: [0, 60, -30, 0], y: [0, -40, 80, 0] }}
+          transition={{ duration: 18, repeat: Infinity, ease: "easeInOut" }}
+          className="absolute bottom-[-10%] left-[30%] w-[400px] h-[400px] rounded-full bg-violet-500/10 blur-[80px]"
+        />
       </div>
-
-      <motion.div
-        initial={{ opacity: 0, y: 20 }}
-        animate={{ opacity: 1, y: 0 }}
-        transition={{ duration: 0.5, ease: 'easeOut' }}
-        className="relative z-10 min-h-screen"
-      >
-        <div className="glass-panel m-4 md:m-6 lg:m-8 min-h-[calc(100vh-4rem)] md:min-h-[calc(100vh-3rem)] lg:min-h-[calc(100vh-4rem)] overflow-hidden">
-          <div className="absolute inset-0 bg-gradient-to-br from-white/5 via-transparent to-transparent pointer-events-none" />
-          <div className="relative h-full">
-            {children}
-          </div>
-        </div>
-      </motion.div>
+      <div className="fixed inset-0 pointer-events-none opacity-[0.015]"
+        style={{ backgroundImage: `url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noise'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noise)'/%3E%3C/svg%3E")` }}
+      />
+      <div className="relative z-10">{children}</div>
     </div>
-  )
+  );
 }
-
-export default GlassLayout

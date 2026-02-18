@@ -1,291 +1,307 @@
-import { RecursiveCharacterTextSplitter } from '@langchain/textsplitters';
-import { OpenAIEmbeddings } from '@langchain/openai';
-import { createClient } from '@supabase/supabase-js';
-import { v4 as uuidv4 } from 'uuid';
-import pdf from 'pdf-parse';
-import { readFileSync, unlinkSync, existsSync, mkdirSync } from 'fs';
-import { join, basename } from 'path';
+import { RecursiveCharacterTextSplitter } from "langchain/text_splitter";
+import { supabase } from "../config/supabase.js";
+import { groq, GROQ_MODEL, GROQ_TEMPERATURE, GROQ_MAX_TOKENS } from "../config/groq.js";
+import { parsePDF, type PageContent } from "./pdfService.js";
+import { generateEmbedding, generateEmbeddings } from "./embeddingService.js";
+import { v4 as uuidv4 } from "uuid";
 
-interface DocumentChunk {
+const textSplitter = new RecursiveCharacterTextSplitter({
+  chunkSize: 800,
+  chunkOverlap: 200,
+  separators: ["\n\n", "\n", ". ", "! ", "? ", "; ", ", ", " ", ""],
+});
+
+export interface DocumentRecord {
   id: string;
-  content: string;
-  metadata: {
-    documentId: string;
-    fileName: string;
-    chunkIndex: number;
-    pageNumber: number;
-    totalChunks: number;
-    createdAt: string;
-  };
-  embedding: number[];
+  filename: string;
+  original_name: string;
+  total_pages: number;
+  total_chunks: number;
+  status: "processing" | "ready" | "error";
+  error_message?: string;
+  created_at: string;
 }
 
-interface ProcessedDocument {
-  documentId: string;
-  fileName: string;
-  totalChunks: number;
-  totalPages: number;
-  status: 'success' | 'error';
-  error?: string;
-}
-
-interface SearchResult {
+export interface ChunkWithSource {
   content: string;
-  metadata: {
-    documentId: string;
-    fileName: string;
-    chunkIndex: number;
-    pageNumber: number;
-  };
+  page_number: number;
+  chunk_index: number;
+  document_id: string;
+  filename: string;
   similarity: number;
 }
 
-const supabaseUrl = process.env.SUPABASE_URL!;
-const supabaseKey = process.env.SUPABASE_ANON_KEY!;
-const supabase = createClient(supabaseUrl, supabaseKey);
-
-const embeddings = new OpenAIEmbeddings({
-  modelName: 'text-embedding-3-small',
-  dimensions: 1536
-});
-
-const textSplitter = new RecursiveCharacterTextSplitter({
-  chunkSize: 1000,
-  chunkOverlap: 200,
-  separators: ['\n\n', '\n', '. ', ' ', '']
-});
-
-const UPLOADS_DIR = join(process.cwd(), 'uploads');
-
-if (!existsSync(UPLOADS_DIR)) {
-  mkdirSync(UPLOADS_DIR, { recursive: true });
+export interface ChatResponse {
+  answer: string;
+  sources: Array<{
+    filename: string;
+    page_number: number;
+    excerpt: string;
+    similarity: number;
+  }>;
+  model: string;
 }
 
-export async function processPDF(
-  filePath: string, 
-  originalFileName: string
-): Promise<ProcessedDocument> {
-  const documentId = uuidv4();
-  
+export async function ingestPDF(
+  filePath: string,
+  originalName: string
+): Promise<DocumentRecord> {
+  const docId = uuidv4();
+
+  const { error: insertError } = await supabase.from("documents").insert({
+    id: docId,
+    filename: filePath.split("/").pop() || originalName,
+    original_name: originalName,
+    status: "processing",
+  });
+
+  if (insertError) {
+    throw new Error(`Failed to create document record: ${insertError.message}`);
+  }
+
   try {
-    if (!existsSync(filePath)) {
-      throw new Error(`File not found: ${filePath}`);
-    }
-
-    const dataBuffer = readFileSync(filePath);
-    
-    let pdfData;
-    try {
-      pdfData = await pdf(dataBuffer);
-    } catch (pdfError) {
-      throw new Error(`Failed to parse PDF: ${pdfError instanceof Error ? pdfError.message : 'Unknown error'}`);
-    }
-
-    if (!pdfData.text || pdfData.text.trim().length === 0) {
-      throw new Error('PDF contains no extractable text');
-    }
-
-    const text = pdfData.text;
-    const totalPages = pdfData.numpages || 1;
-
-    const chunks = await textSplitter.splitText(text);
-
-    if (chunks.length === 0) {
-      throw new Error('No chunks generated from PDF text');
-    }
-
-    const chunksPerPage = Math.ceil(chunks.length / totalPages);
-
-    const documentChunks: DocumentChunk[] = await Promise.all(
-      chunks.map(async (chunk, index) => {
-        const embedding = await embeddings.embedDocuments([chunk]);
-        const estimatedPage = Math.min(Math.floor(index / chunksPerPage) + 1, totalPages);
-        
-        return {
-          id: uuidv4(),
-          content: chunk,
-          metadata: {
-            documentId,
-            fileName: originalFileName,
-            chunkIndex: index,
-            pageNumber: estimatedPage,
-            totalChunks: chunks.length,
-            createdAt: new Date().toISOString()
-          },
-          embedding: embedding[0]
-        };
-      })
+    console.log(`[RAG] Parsing PDF: ${originalName}`);
+    const parsed = await parsePDF(filePath);
+    console.log(
+      `[RAG] Extracted ${parsed.totalPages} pages, ${parsed.text.length} characters`
     );
 
-    const { error: insertError } = await supabase
-      .from('document_embeddings')
-      .insert(documentChunks.map(chunk => ({
-        id: chunk.id,
-        content: chunk.content,
-        metadata: chunk.metadata,
-        embedding: chunk.embedding
-      })));
+    console.log(`[RAG] Chunking text...`);
+    const allChunks: Array<{
+      content: string;
+      pageNumber: number;
+      chunkIndex: number;
+    }> = [];
 
-    if (insertError) {
-      console.error('Supabase insert error:', insertError);
-      throw new Error(`Failed to store embeddings: ${insertError.message}`);
-    }
+    let globalChunkIndex = 0;
 
-    const { error: docError } = await supabase
-      .from('documents')
-      .insert({
-        id: documentId,
-        file_name: originalFileName,
-        total_chunks: chunks.length,
-        total_pages: totalPages,
-        status: 'processed',
-        created_at: new Date().toISOString()
-      });
+    for (const page of parsed.pages) {
+      if (page.text.length < 30) continue;
 
-    if (docError) {
-      console.error('Document metadata insert error:', docError);
-    }
+      const chunks = await textSplitter.splitText(page.text);
 
-    try {
-      unlinkSync(filePath);
-    } catch (unlinkError) {
-      console.warn('Failed to delete temporary file:', unlinkError);
-    }
-
-    return {
-      documentId,
-      fileName: originalFileName,
-      totalChunks: chunks.length,
-      totalPages,
-      status: 'success'
-    };
-
-  } catch (error) {
-    console.error('PDF processing error:', error);
-    
-    if (existsSync(filePath)) {
-      try {
-        unlinkSync(filePath);
-      } catch (e) {
-        console.warn('Cleanup failed:', e);
+      for (const chunk of chunks) {
+        allChunks.push({
+          content: chunk,
+          pageNumber: page.pageNumber,
+          chunkIndex: globalChunkIndex++,
+        });
       }
     }
 
+    if (allChunks.length === 0) {
+      throw new Error("No meaningful text chunks extracted from PDF");
+    }
+
+    console.log(`[RAG] Created ${allChunks.length} chunks`);
+
+    console.log(`[RAG] Generating embeddings...`);
+    const chunkTexts = allChunks.map((c) => c.content);
+    const embeddings = await generateEmbeddings(chunkTexts);
+
+    console.log(`[RAG] Storing in vector database...`);
+    const rows = allChunks.map((chunk, i) => ({
+      id: uuidv4(),
+      document_id: docId,
+      content: chunk.content,
+      page_number: chunk.pageNumber,
+      chunk_index: chunk.chunkIndex,
+      metadata: {
+        original_name: originalName,
+        page: chunk.pageNumber,
+      },
+      embedding: JSON.stringify(embeddings[i]),
+    }));
+
+    for (let i = 0; i < rows.length; i += 50) {
+      const batch = rows.slice(i, i + 50);
+      const { error: chunkError } = await supabase
+        .from("document_chunks")
+        .insert(batch);
+
+      if (chunkError) {
+        throw new Error(
+          `Failed to store chunks (batch ${i}): ${chunkError.message}`
+        );
+      }
+    }
+
+    const { error: updateError } = await supabase
+      .from("documents")
+      .update({
+        status: "ready",
+        total_pages: parsed.totalPages,
+        total_chunks: allChunks.length,
+      })
+      .eq("id", docId);
+
+    if (updateError) {
+      console.error(`[RAG] Warning: Failed to update status: ${updateError.message}`);
+    }
+
+    console.log(`[RAG] Successfully ingested: ${originalName}`);
+
     return {
-      documentId,
-      fileName: originalFileName,
-      totalChunks: 0,
-      totalPages: 0,
-      status: 'error',
-      error: error instanceof Error ? error.message : 'Unknown error'
+      id: docId,
+      filename: filePath.split("/").pop() || originalName,
+      original_name: originalName,
+      total_pages: parsed.totalPages,
+      total_chunks: allChunks.length,
+      status: "ready",
+      created_at: new Date().toISOString(),
     };
+  } catch (error: any) {
+    await supabase
+      .from("documents")
+      .update({
+        status: "error",
+        error_message: error.message,
+      })
+      .eq("id", docId);
+
+    throw error;
   }
 }
 
 export async function searchDocuments(
   query: string,
-  options: {
-    documentIds?: string[];
-    topK?: number;
-    threshold?: number;
-  } = {}
-): Promise<SearchResult[]> {
-  const { documentIds, topK = 5, threshold = 0.5 } = options;
+  documentIds?: string[],
+  topK: number = 8,
+  threshold: number = 0.3
+): Promise<ChunkWithSource[]> {
+  const queryEmbedding = await generateEmbedding(query);
 
-  try {
-    const queryEmbedding = await embeddings.embedDocuments([query]);
-
-    let rpcCall = supabase.rpc('match_documents', {
-      query_embedding: queryEmbedding[0],
-      match_count: topK,
-      filter_document_ids: documentIds || null,
-      similarity_threshold: threshold
-    });
-
-    const { data, error } = await rpcCall;
-
-    if (error) {
-      console.error('Vector search error:', error);
-      throw new Error(`Search failed: ${error.message}`);
-    }
-
-    if (!data || data.length === 0) {
-      return [];
-    }
-
-    return data.map((result: any) => ({
-      content: result.content,
-      metadata: result.metadata,
-      similarity: result.similarity
-    }));
-
-  } catch (error) {
-    console.error('Document search error:', error);
-    throw error;
-  }
-}
-
-export async function getDocumentContext(
-  query: string,
-  documentIds?: string[]
-): Promise<string> {
-  const results = await searchDocuments(query, { documentIds, topK: 10 });
-
-  if (results.length === 0) {
-    return 'No relevant information found in uploaded documents.';
-  }
-
-  const contextParts = results.map((result, index) => {
-    const { fileName, pageNumber, chunkIndex } = result.metadata;
-    return `[Document: ${fileName}, Page: ${pageNumber}]\n${result.content}`;
+  const { data, error } = await supabase.rpc("match_documents", {
+    query_embedding: JSON.stringify(queryEmbedding),
+    match_threshold: threshold,
+    match_count: topK,
+    filter_document_ids: documentIds || null,
   });
 
-  return contextParts.join('\n\n---\n\n');
-}
-
-export async function listDocuments(): Promise<any[]> {
-  const { data, error } = await supabase
-    .from('documents')
-    .select('*')
-    .order('created_at', { ascending: false });
-
   if (error) {
-    console.error('List documents error:', error);
+    throw new Error(`Vector search failed: ${error.message}`);
+  }
+
+  if (!data || data.length === 0) {
     return [];
   }
 
+  const docIdSet = [...new Set(data.map((d: any) => d.document_id))];
+  const { data: docs } = await supabase
+    .from("documents")
+    .select("id, original_name")
+    .in("id", docIdSet);
+
+  const docMap = new Map(docs?.map((d: any) => [d.id, d.original_name]) || []);
+
+  return data.map((chunk: any) => ({
+    content: chunk.content,
+    page_number: chunk.page_number,
+    chunk_index: chunk.chunk_index,
+    document_id: chunk.document_id,
+    filename: docMap.get(chunk.document_id) || "Unknown file",
+    similarity: chunk.similarity,
+  }));
+}
+
+export async function ragChat(
+  query: string,
+  documentIds?: string[],
+  conversationHistory?: Array<{ role: string; content: string }>
+): Promise<ChatResponse> {
+  const chunks = await searchDocuments(query, documentIds);
+
+  if (chunks.length === 0) {
+    return {
+      answer:
+        "I couldn't find any relevant information in your uploaded documents for this question. Please try rephrasing or make sure you've uploaded the relevant PDFs.",
+      sources: [],
+      model: GROQ_MODEL,
+    };
+  }
+
+  const contextBlocks = chunks.map((chunk, i) => {
+    return `[Source ${i + 1}: "${chunk.filename}", Page ${chunk.page_number}]\n${chunk.content}`;
+  });
+
+  const context = contextBlocks.join("\n\n---\n\n");
+
+  const systemPrompt = `You are ScholarSync, an AI study assistant. Your job is to answer questions using ONLY the provided document excerpts. Follow these rules strictly:
+
+1. Answer accurately using information from the provided sources below.
+2. ALWAYS cite your sources using this format: **[Source: "filename.pdf", Page X]** after each claim.
+3. When comparing across documents, clearly label which information comes from which file.
+4. Use clear formatting: headers, bullet points, bold text for readability.
+5. If the provided sources don't contain enough information, say so clearly.
+6. Never make up information that isn't in the sources.
+
+--- DOCUMENT EXCERPTS ---
+${context}
+-------------------------`;
+
+  const messages: Array<{ role: "system" | "user" | "assistant"; content: string }> = [
+    { role: "system", content: systemPrompt },
+  ];
+
+  if (conversationHistory && conversationHistory.length > 0) {
+    const recent = conversationHistory.slice(-6);
+    for (const msg of recent) {
+      messages.push({
+        role: msg.role as "user" | "assistant",
+        content: msg.content,
+      });
+    }
+  }
+
+  messages.push({ role: "user", content: query });
+
+  const completion = await groq.chat.completions.create({
+    model: GROQ_MODEL,
+    messages,
+    temperature: GROQ_TEMPERATURE,
+    max_tokens: GROQ_MAX_TOKENS,
+    top_p: 0.9,
+  });
+
+  const answer =
+    completion.choices[0]?.message?.content ||
+    "I was unable to generate a response. Please try again.";
+
+  const uniqueSources = new Map<string, ChunkWithSource>();
+  for (const chunk of chunks) {
+    const key = `${chunk.filename}-p${chunk.page_number}`;
+    if (
+      !uniqueSources.has(key) ||
+      chunk.similarity > (uniqueSources.get(key)?.similarity || 0)
+    ) {
+      uniqueSources.set(key, chunk);
+    }
+  }
+
+  const sources = Array.from(uniqueSources.values())
+    .sort((a, b) => b.similarity - a.similarity)
+    .slice(0, 6)
+    .map((chunk) => ({
+      filename: chunk.filename,
+      page_number: chunk.page_number,
+      excerpt: chunk.content.slice(0, 150) + "...",
+      similarity: Math.round(chunk.similarity * 100) / 100,
+    }));
+
+  return { answer, sources, model: GROQ_MODEL };
+}
+
+export async function listDocuments(): Promise<DocumentRecord[]> {
+  const { data, error } = await supabase
+    .from("documents")
+    .select("*")
+    .order("created_at", { ascending: false });
+
+  if (error) throw new Error(`Failed to list documents: ${error.message}`);
   return data || [];
 }
 
-export async function deleteDocument(documentId: string): Promise<boolean> {
-  try {
-    const { error: chunksError } = await supabase
-      .from('document_embeddings')
-      .delete()
-      .eq('metadata->>documentId', documentId);
-
-    if (chunksError) {
-      console.error('Delete chunks error:', chunksError);
-      return false;
-    }
-
-    const { error: docError } = await supabase
-      .from('documents')
-      .delete()
-      .eq('id', documentId);
-
-    if (docError) {
-      console.error('Delete document error:', docError);
-      return false;
-    }
-
-    return true;
-  } catch (error) {
-    console.error('Delete document error:', error);
-    return false;
-  }
-}
-
-export function getUploadsDir(): string {
-  return UPLOADS_DIR;
+export async function deleteDocument(docId: string): Promise<void> {
+  const { error } = await supabase.from("documents").delete().eq("id", docId);
+  if (error) throw new Error(`Failed to delete document: ${error.message}`);
 }

@@ -1,112 +1,68 @@
-import { Request, Response } from 'express';
-import { processPDF, getUploadsDir } from '../services/ragService.js';
-import { existsSync, mkdirSync } from 'fs';
-import { join } from 'path';
+import { Request, Response } from "express";
+import { ingestPDF, listDocuments, deleteDocument } from "../services/ragService.js";
+import fs from "fs";
 
-export async function handleUpload(req: Request, res: Response): Promise<void> {
+export async function uploadPDF(req: Request, res: Response): Promise<void> {
   try {
     if (!req.file) {
-      res.status(400).json({ error: 'No file uploaded' });
+      res.status(400).json({ error: "No file uploaded" });
       return;
     }
 
     const file = req.file;
 
-    if (file.mimetype !== 'application/pdf') {
-      res.status(400).json({ error: 'Only PDF files are supported' });
+    if (file.mimetype !== "application/pdf") {
+      fs.unlinkSync(file.path);
+      res.status(400).json({ error: "Only PDF files are accepted" });
       return;
     }
 
-    const maxSize = 50 * 1024 * 1024;
-    if (file.size > maxSize) {
-      res.status(400).json({ error: 'File size exceeds 50MB limit' });
+    if (file.size > 50 * 1024 * 1024) {
+      fs.unlinkSync(file.path);
+      res.status(400).json({ error: "File size must be under 50MB" });
       return;
     }
 
-    const uploadsDir = getUploadsDir();
-    const filePath = join(uploadsDir, file.filename);
-    const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
+    console.log(
+      `[Upload] Processing: ${file.originalname} (${(file.size / 1024).toFixed(1)}KB)`
+    );
 
-    const result = await processPDF(filePath, originalName);
+    const document = await ingestPDF(file.path, file.originalname);
 
-    if (result.status === 'error') {
-      res.status(422).json({
-        error: 'Failed to process PDF',
-        details: result.error,
-        documentId: result.documentId
-      });
-      return;
-    }
+    try { fs.unlinkSync(file.path); } catch {}
 
-    res.status(200).json({
-      message: 'PDF processed successfully',
-      document: {
-        id: result.documentId,
-        fileName: result.fileName,
-        totalChunks: result.totalChunks,
-        totalPages: result.totalPages,
-        status: result.status
-      }
+    res.status(201).json({
+      message: "Document processed successfully",
+      document,
     });
-
-  } catch (error) {
-    console.error('Upload error:', error);
+  } catch (error: any) {
+    console.error(`[Upload] Error: ${error.message}`);
     res.status(500).json({
-      error: 'Failed to upload file',
-      message: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
+      error: "Failed to process PDF",
+      details: error.message,
     });
   }
 }
 
-export async function handleMultipleUpload(req: Request, res: Response): Promise<void> {
+export async function getDocuments(_req: Request, res: Response): Promise<void> {
   try {
-    const files = req.files as Express.Multer.File[];
+    const documents = await listDocuments();
+    res.json({ documents });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
+  }
+}
 
-    if (!files || files.length === 0) {
-      res.status(400).json({ error: 'No files uploaded' });
+export async function removeDocument(req: Request, res: Response): Promise<void> {
+  try {
+    const { id } = req.params;
+    if (!id) {
+      res.status(400).json({ error: "Document ID is required" });
       return;
     }
-
-    const uploadsDir = getUploadsDir();
-    const results = [];
-
-    for (const file of files) {
-      if (file.mimetype !== 'application/pdf') {
-        results.push({
-          originalName: file.originalname,
-          status: 'error',
-          error: 'Only PDF files are supported'
-        });
-        continue;
-      }
-
-      const filePath = join(uploadsDir, file.filename);
-      const originalName = Buffer.from(file.originalname, 'latin1').toString('utf8');
-      
-      const result = await processPDF(filePath, originalName);
-      results.push({
-        originalName,
-        documentId: result.documentId,
-        totalChunks: result.totalChunks,
-        totalPages: result.totalPages,
-        status: result.status,
-        error: result.error
-      });
-    }
-
-    const successCount = results.filter(r => r.status === 'success').length;
-    const errorCount = results.filter(r => r.status === 'error').length;
-
-    res.status(200).json({
-      message: `Processed ${successCount} files successfully, ${errorCount} failed`,
-      results
-    });
-
-  } catch (error) {
-    console.error('Multiple upload error:', error);
-    res.status(500).json({
-      error: 'Failed to process uploads',
-      message: process.env.NODE_ENV === 'development' ? (error as Error).message : undefined
-    });
+    await deleteDocument(id);
+    res.json({ message: "Document deleted successfully" });
+  } catch (error: any) {
+    res.status(500).json({ error: error.message });
   }
 }

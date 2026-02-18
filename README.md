@@ -1,248 +1,126 @@
-# ScholarSync
+# 🎓 ScholarSync — AI-Powered Study Assistant
 
-An AI-powered study assistant that allows students to upload multiple PDF notes, index them using vector embeddings, and perform cross-document queries.
-
-## Features
-
-- **PDF Upload & Processing**: Upload multiple PDF documents with drag-and-drop support
-- **Vector Search**: Semantic search across all uploaded documents using OpenAI embeddings
-- **RAG Pipeline**: Retrieval-Augmented Generation for accurate, cited answers
-- **Cross-Document Queries**: Compare concepts across multiple documents
-- **Streaming Responses**: Real-time AI response streaming
-- **Premium Glassmorphism UI**: Dark mode with backdrop blur effects and animations
+Upload your PDFs. Ask questions across all your documents. Get cited answers with page numbers in seconds.
 
 ## Tech Stack
 
-- **Frontend**: React (Vite) + TypeScript, Tailwind CSS, Framer Motion
-- **Backend**: Node.js + Express, TypeScript
-- **AI/ML**: LangChain.js, OpenAI API (GPT-4, text-embedding-3-small)
-- **Vector Database**: Supabase (pgvector)
+- **Frontend:** React 18 + TypeScript + Tailwind CSS + Framer Motion
+- **Backend:** Node.js + Express + TypeScript
+- **AI/LLM:** Groq API (LLaMA 3.3 70B)
+- **Embeddings:** HuggingFace Inference API (all-MiniLM-L6-v2, 384-dim)
+- **Vector DB:** Supabase pgvector
+- **PDF Parsing:** pdf-parse + LangChain RecursiveCharacterTextSplitter
 
-## Project Structure
+## Setup
 
-```
-ScholarSync/
-├── package.json              # Root workspace config
-├── client/                   # Frontend React application
-│   ├── src/
-│   │   ├── components/
-│   │   │   ├── GlassLayout.tsx
-│   │   │   └── FileUpload.tsx
-│   │   ├── pages/
-│   │   │   └── Dashboard.tsx
-│   │   ├── services/
-│   │   │   └── api.ts
-│   │   ├── types/
-│   │   │   └── index.ts
-│   │   ├── App.tsx
-│   │   ├── main.tsx
-│   │   └── index.css
-│   ├── package.json
-│   ├── tsconfig.json
-│   ├── vite.config.ts
-│   └── tailwind.config.js
-└── server/                   # Backend Express application
-    ├── src/
-    │   ├── controllers/
-    │   │   ├── chatController.ts
-    │   │   └── uploadController.ts
-    │   ├── services/
-    │   │   └── ragService.ts
-    │   ├── middleware/
-    │   │   └── uploadMiddleware.ts
-    │   ├── routes/
-    │   │   ├── upload.ts
-    │   │   ├── chat.ts
-    │   │   └── documents.ts
-    │   └── index.ts
-    ├── package.json
-    └── tsconfig.json
-```
-
-## Prerequisites
-
-- Node.js 18+ installed
-- OpenAI API key
-- Supabase account with a project
-
-## Setup Instructions
-
-### 1. Clone and Install Dependencies
+### 1. Clone & Install
 
 ```bash
-# Navigate to the project
-cd ScholarSync
-
-# Install all dependencies (root, client, server)
+git clone https://github.com/lekhanpro/scholarsync.git
+cd scholarsync
 npm install
+cd client && npm install && cd ..
+cd server && npm install && cd ..
 ```
 
-### 2. Set Up Supabase Database
+### 2. Environment Variables
 
-Run this SQL in your Supabase SQL Editor to create the required tables and functions:
+Copy `.env.example` to `.env` and fill in your keys:
+
+```bash
+cp .env.example .env
+```
+
+| Variable | Where to get it |
+|---|---|
+| `GROQ_API_KEY` | https://console.groq.com/keys |
+| `SUPABASE_URL` | Supabase Dashboard → Settings → API |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase Dashboard → Settings → API |
+| `HF_API_KEY` | https://huggingface.co/settings/tokens |
+
+### 3. Supabase Setup
+
+Run this SQL in your Supabase SQL Editor:
 
 ```sql
--- Enable pgvector extension
-CREATE EXTENSION IF NOT EXISTS vector;
+-- Enable pgvector
+create extension if not exists vector;
 
 -- Documents table
-CREATE TABLE documents (
-  id UUID PRIMARY KEY,
-  file_name TEXT NOT NULL,
-  total_chunks INTEGER DEFAULT 0,
-  total_pages INTEGER DEFAULT 0,
-  status TEXT DEFAULT 'processing',
-  created_at TIMESTAMPTZ DEFAULT NOW()
+create table if not exists documents (
+  id uuid primary key default gen_random_uuid(),
+  filename text not null,
+  original_name text not null,
+  total_pages integer default 0,
+  total_chunks integer default 0,
+  status text default 'processing' check (status in ('processing', 'ready', 'error')),
+  error_message text,
+  created_at timestamptz default now()
 );
 
--- Document embeddings table with vector column
-CREATE TABLE document_embeddings (
-  id UUID PRIMARY KEY,
-  content TEXT NOT NULL,
-  metadata JSONB NOT NULL,
-  embedding VECTOR(1536)
+-- Document chunks with vector embeddings
+create table if not exists document_chunks (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid references documents(id) on delete cascade,
+  content text not null,
+  page_number integer not null,
+  chunk_index integer not null,
+  metadata jsonb default '{}',
+  embedding vector(384),
+  created_at timestamptz default now()
 );
 
--- Create index for vector similarity search
-CREATE INDEX ON document_embeddings 
-USING ivfflat (embedding vector_cosine_ops)
-WITH (lists = 100);
+-- IVFFlat index for fast similarity search
+create index if not exists document_chunks_embedding_idx
+  on document_chunks using ivfflat (embedding vector_cosine_ops)
+  with (lists = 100);
 
--- Function for similarity search
-CREATE OR REPLACE FUNCTION match_documents(
-  query_embedding VECTOR(1536),
-  match_count INTEGER DEFAULT 5,
-  filter_document_ids TEXT[] DEFAULT NULL,
-  similarity_threshold FLOAT DEFAULT 0.5
+-- RPC function for similarity search
+create or replace function match_documents(
+  query_embedding text,
+  match_threshold float default 0.3,
+  match_count int default 8,
+  filter_document_ids uuid[] default null
 )
-RETURNS TABLE (
-  id UUID,
-  content TEXT,
-  metadata JSONB,
-  similarity FLOAT
+returns table (
+  id uuid,
+  document_id uuid,
+  content text,
+  page_number integer,
+  chunk_index integer,
+  metadata jsonb,
+  similarity float
 )
-LANGUAGE plpgsql
-AS $$
-BEGIN
-  RETURN QUERY
-  SELECT 
-    de.id,
-    de.content,
-    de.metadata,
-    1 - (de.embedding <=> query_embedding) AS similarity
-  FROM document_embeddings de
-  WHERE 
-    (filter_document_ids IS NULL OR 
-     de.metadata->>'documentId' = ANY(filter_document_ids))
-    AND (1 - (de.embedding <=> query_embedding)) >= similarity_threshold
-  ORDER BY de.embedding <=> query_embedding
-  LIMIT match_count;
-END;
+language plpgsql
+as $$
+begin
+  return query
+  select
+    dc.id,
+    dc.document_id,
+    dc.content,
+    dc.page_number,
+    dc.chunk_index,
+    dc.metadata,
+    1 - (dc.embedding <=> query_embedding::vector) as similarity
+  from document_chunks dc
+  where
+    (filter_document_ids is null or dc.document_id = any(filter_document_ids))
+    and 1 - (dc.embedding <=> query_embedding::vector) > match_threshold
+  order by dc.embedding <=> query_embedding::vector
+  limit match_count;
+end;
 $$;
 ```
 
-### 3. Configure Environment Variables
-
-Create `server/.env` based on the example:
+### 4. Run
 
 ```bash
-cp server/.env.example server/.env
-```
-
-Edit `server/.env` with your credentials:
-
-```env
-PORT=5000
-NODE_ENV=development
-
-# OpenAI Configuration
-OPENAI_API_KEY=sk-your-openai-api-key-here
-OPENAI_MODEL=gpt-4-turbo-preview
-
-# Supabase Configuration
-SUPABASE_URL=https://your-project.supabase.co
-SUPABASE_ANON_KEY=your-supabase-anon-key
-
-# Client URL (for CORS)
-CLIENT_URL=http://localhost:5173
-```
-
-### 4. Run the Application
-
-```bash
-# Run both frontend and backend in development mode
 npm run dev
-
-# Or run separately:
-npm run dev:server  # Backend on port 5000
-npm run dev:client  # Frontend on port 5173
 ```
 
-### 5. Open in Browser
-
-Navigate to `http://localhost:5173`
-
-## API Endpoints
-
-### Upload
-- `POST /api/upload/single` - Upload a single PDF
-- `POST /api/upload/multiple` - Upload multiple PDFs
-
-### Chat
-- `POST /api/chat` - Send a chat message (supports streaming)
-- `POST /api/chat/compare` - Compare documents on a topic
-
-### Documents
-- `GET /api/documents` - List all uploaded documents
-- `DELETE /api/documents/:id` - Delete a document
-
-## Environment Variables
-
-| Variable | Description | Required |
-|----------|-------------|----------|
-| `OPENAI_API_KEY` | OpenAI API key for embeddings and chat | Yes |
-| `OPENAI_MODEL` | Model for chat completions (default: gpt-4-turbo-preview) | No |
-| `SUPABASE_URL` | Your Supabase project URL | Yes |
-| `SUPABASE_ANON_KEY` | Supabase anonymous key | Yes |
-| `PORT` | Server port (default: 5000) | No |
-| `CLIENT_URL` | Frontend URL for CORS (default: http://localhost:5173) | No |
-
-## Building for Production
-
-```bash
-# Build both client and server
-npm run build
-
-# Start production server
-npm start
-```
-
-## GitHub Setup & Deployment
-
-### Initialize Git Repository
-
-```bash
-# Initialize git
-git init
-
-# Add all files
-git add .
-
-# Create initial commit
-git commit -m "Initial commit: ScholarSync AI study assistant"
-
-# Add your GitHub remote
-git remote add origin https://github.com/yourusername/scholarsync.git
-
-# Push to GitHub
-git push -u origin main
-```
-
-### Deploy to Vercel/Render
-
-1. Connect your GitHub repository to Vercel or Render
-2. Set environment variables in the deployment dashboard
-3. Deploy!
+- Frontend: http://localhost:5173
+- Backend: http://localhost:3001
 
 ## License
 

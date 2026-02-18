@@ -1,55 +1,66 @@
-import express from 'express';
-import cors from 'cors';
-import dotenv from 'dotenv';
-import { fileURLToPath } from 'url';
-import { dirname, join } from 'path';
-import uploadRoutes from './routes/upload.js';
-import chatRoutes from './routes/chat.js';
-import documentRoutes from './routes/documents.js';
+import express from "express";
+import cors from "cors";
+import dotenv from "dotenv";
+import path from "path";
+import fs from "fs";
+import { fileURLToPath } from "url";
+import uploadRoutes from "./routes/uploadRoutes.js";
+import chatRoutes from "./routes/chatRoutes.js";
+import { errorHandler } from "./middleware/errorHandler.js";
 
-dotenv.config();
+dotenv.config({ path: "../.env" });
 
 const __filename = fileURLToPath(import.meta.url);
-const __dirname = dirname(__filename);
+const __dirname = path.dirname(__filename);
 
 const app = express();
-const PORT = process.env.PORT || 5000;
+const PORT = parseInt(process.env.PORT || "3001", 10);
 
-app.use(cors({
-  origin: process.env.CLIENT_URL || 'http://localhost:5173',
-  credentials: true
-}));
+const uploadsDir = path.join(__dirname, "../uploads");
+if (!fs.existsSync(uploadsDir)) {
+  fs.mkdirSync(uploadsDir, { recursive: true });
+}
 
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+app.use(
+  cors({
+    origin: process.env.NODE_ENV === "production"
+      ? process.env.CLIENT_URL
+      : ["http://localhost:5173", "http://localhost:3000"],
+    credentials: true,
+  })
+);
 
-const uploadsDir = join(__dirname, '../uploads');
-app.use('/uploads', express.static(uploadsDir));
+app.use(express.json({ limit: "10mb" }));
 
-app.get('/health', (req, res) => {
-  res.json({ 
-    status: 'healthy', 
+app.use("/api", uploadRoutes);
+app.use("/api", chatRoutes);
+
+app.get("/api/health", (_req, res) => {
+  res.json({
+    status: "ok",
     timestamp: new Date().toISOString(),
-    version: '1.0.0'
+    service: "ScholarSync API",
   });
 });
 
-app.use('/api/upload', uploadRoutes);
-app.use('/api/chat', chatRoutes);
-app.use('/api/documents', documentRoutes);
-
-app.use((err: Error, req: express.Request, res: express.Response, next: express.NextFunction) => {
-  console.error('Unhandled error:', err);
-  res.status(500).json({
-    error: 'Internal server error',
-    message: process.env.NODE_ENV === 'development' ? err.message : 'Something went wrong'
+if (process.env.NODE_ENV === "production") {
+  const clientDist = path.join(__dirname, "../../client/dist");
+  app.use(express.static(clientDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(clientDist, "index.html"));
   });
-});
+}
+
+app.use(errorHandler);
 
 app.listen(PORT, () => {
-  console.log(`🚀 ScholarSync Server running on port ${PORT}`);
-  console.log(`📚 Environment: ${process.env.NODE_ENV || 'development'}`);
-  console.log(`🔗 Health check: http://localhost:${PORT}/health`);
+  console.log(`
+  =============================================
+     ScholarSync API
+     Running on http://localhost:${PORT}
+     Environment: ${process.env.NODE_ENV || "development"}
+  =============================================
+  `);
 });
 
 export default app;
