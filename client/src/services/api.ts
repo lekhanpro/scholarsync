@@ -3,18 +3,20 @@ import { supabase } from "../lib/supabase";
 
 const API_BASE = "/api";
 
-async function authHeader() {
+async function getAuthToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();
-  const token = data.session?.access_token;
-  return token ? { Authorization: `Bearer ${token}` } : {};
+  return data.session?.access_token || null;
 }
 
 export async function uploadPDF(file: File): Promise<{ document: Document }> {
   const formData = new FormData();
   formData.append("pdf", file);
+  const token = await getAuthToken();
+  const headers: HeadersInit = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE}/upload`, {
     method: "POST",
-    headers: { ...(await authHeader()) },
+    headers,
     body: formData,
   });
   if (!response.ok) {
@@ -25,25 +27,32 @@ export async function uploadPDF(file: File): Promise<{ document: Document }> {
 }
 
 export async function getDocuments(): Promise<Document[]> {
-  const response = await fetch(`${API_BASE}/documents`, {
-    headers: { ...(await authHeader()) },
-  });
+  const token = await getAuthToken();
+  const headers: HeadersInit = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const response = await fetch(`${API_BASE}/documents`, { headers });
   if (!response.ok) throw new Error("Failed to fetch documents");
   const data = await response.json();
   return data.documents;
 }
 
 export async function deleteDocument(id: string): Promise<void> {
+  const token = await getAuthToken();
+  const headers: HeadersInit = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE}/documents/${id}`, {
     method: "DELETE",
-    headers: { ...(await authHeader()) },
+    headers,
   });
   if (!response.ok) throw new Error("Failed to delete document");
 }
 
 export async function getDocumentUrl(id: string): Promise<string> {
+  const token = await getAuthToken();
+  const headers: HeadersInit = {};
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE}/documents/${id}/url`, {
-    headers: { ...(await authHeader()) },
+    headers,
   });
   if (!response.ok) throw new Error("Failed to fetch document URL");
   const data = await response.json();
@@ -55,9 +64,12 @@ export async function sendChatMessage(
   documentIds?: string[],
   conversationHistory?: Array<{ role: string; content: string }>
 ): Promise<ChatResponse> {
+  const token = await getAuthToken();
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE}/chat`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(await authHeader()) },
+    headers,
     body: JSON.stringify({ query, documentIds, conversationHistory }),
   });
   if (!response.ok) {
@@ -74,9 +86,12 @@ export async function sendChatMessageStream(
   onToken: (token: string) => void,
   onDone: (data: { sources: ChatResponse["sources"]; model: string }) => void
 ) {
+  const token = await getAuthToken();
+  const headers: HeadersInit = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
   const response = await fetch(`${API_BASE}/chat/stream`, {
     method: "POST",
-    headers: { "Content-Type": "application/json", ...(await authHeader()) },
+    headers,
     body: JSON.stringify({ query, documentIds, conversationHistory }),
   });
 
