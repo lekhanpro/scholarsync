@@ -101,7 +101,8 @@ export async function getDocuments(req: AuthenticatedRequest, res: Response): Pr
 
 export async function removeDocument(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
-    const { id } = req.params;
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
     const userId = req.user?.id;
     if (!id) {
       res.status(400).json({ error: "Document ID is required" });
@@ -124,7 +125,8 @@ export async function getDocumentSignedUrl(
   res: Response
 ): Promise<void> {
   try {
-    const { id } = req.params;
+    const rawId = req.params.id;
+    const id = Array.isArray(rawId) ? rawId[0] : rawId;
     const userId = req.user?.id;
     if (!id || !userId) {
       res.status(400).json({ error: "Document ID is required" });
