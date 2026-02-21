@@ -51,28 +51,28 @@ const features: Feature[] = [
     icon: Upload,
     title: "Multi-PDF Upload",
     description:
-      "Drag and drop lectures, textbooks, and papers. We parse and index every page instantly so your entire library is searchable.",
+      "Drag and drop lectures, textbooks, and papers. We parse and index every page so your entire library is searchable.",
     gradient: "from-violet-500 to-purple-500",
   },
   {
     icon: Brain,
     title: "RAG-Powered Search",
     description:
-      "Your documents are chunked, embedded with HuggingFace models, and stored in a pgvector database for lightning-fast semantic retrieval.",
+      "Your documents are chunked, embedded with HuggingFace models, and stored in pgvector for fast semantic retrieval.",
     gradient: "from-indigo-500 to-blue-500",
   },
   {
     icon: FileSearch,
-    title: "Cross-Document Queries",
+    title: "Cited, Navigable Answers",
     description:
-      "Compare definitions across multiple files, synthesize information from different sources, and get cited answers with exact page numbers.",
+      "Every response includes sources with page numbers. Click a citation to preview the exact page.",
     gradient: "from-purple-500 to-pink-500",
   },
   {
     icon: Zap,
-    title: "Groq-Powered Speed",
+    title: "Streaming Responses",
     description:
-      "Answers in under 2 seconds using LLaMA 3.3 70B on Groq's inference engine. No waiting, no spinning wheels.",
+      "Answers stream token-by-token using Groq’s LLaMA 3.3 70B for fast, smooth interaction.",
     gradient: "from-amber-500 to-orange-500",
   },
 ];
@@ -80,26 +80,26 @@ const features: Feature[] = [
 const steps: Step[] = [
   {
     step: "01",
+    title: "Sign In",
+    desc: "Private workspaces with per-user storage",
+    icon: GraduationCap,
+  },
+  {
+    step: "02",
     title: "Upload",
     desc: "Drop your PDFs into ScholarSync",
     icon: FileText,
   },
   {
-    step: "02",
+    step: "03",
     title: "Index",
     desc: "AI parses, chunks, and embeds every page",
     icon: Database,
   },
   {
-    step: "03",
-    title: "Ask",
-    desc: "Query across all your documents at once",
-    icon: MessageSquare,
-  },
-  {
     step: "04",
-    title: "Learn",
-    desc: "Get cited answers with page references",
+    title: "Ask",
+    desc: "Get streaming, cited answers with page references",
     icon: CheckCircle2,
   },
 ];
@@ -112,9 +112,11 @@ const techStack: TechItem[] = [
   { name: "Node.js", category: "Runtime", description: "Server runtime" },
   { name: "Express", category: "Backend", description: "API framework" },
   { name: "Groq", category: "AI / LLM", description: "LLaMA 3.3 70B inference" },
-  { name: "Supabase", category: "Database", description: "pgvector storage" },
+  { name: "Supabase", category: "Database", description: "pgvector + Auth" },
   { name: "HuggingFace", category: "Embeddings", description: "all-MiniLM-L6-v2" },
   { name: "LangChain", category: "Processing", description: "Text splitting" },
+  { name: "PostHog", category: "Analytics", description: "Product analytics" },
+  { name: "Tesseract", category: "OCR", description: "Scanned PDF fallback" },
 ];
 
 /* ------------------------------------------------------------------ */
@@ -386,7 +388,7 @@ export default function Landing(): JSX.Element {
               className="flex flex-col sm:flex-row items-center justify-center gap-4"
             >
               <Link
-                to="/dashboard"
+                to="/auth"
                 className="group flex items-center gap-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-bold text-lg hover:from-violet-500 hover:to-indigo-500 transition-all shadow-2xl shadow-violet-500/25 hover:shadow-violet-500/40 hover:scale-[1.02] focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-[#030014]"
                 aria-label="Start studying with ScholarSync"
               >
@@ -645,7 +647,7 @@ export default function Landing(): JSX.Element {
               Upload your first PDF and experience AI-powered studying.
             </p>
             <Link
-              to="/dashboard"
+              to="/auth"
               className="inline-flex items-center gap-3 px-8 py-4 rounded-2xl bg-gradient-to-r from-violet-600 to-indigo-600 text-white font-bold text-lg hover:from-violet-500 hover:to-indigo-500 transition-all shadow-2xl shadow-violet-500/25 hover:shadow-violet-500/40 focus:outline-none focus:ring-2 focus:ring-violet-500 focus:ring-offset-2 focus:ring-offset-[#030014]"
               aria-label="Launch ScholarSync application"
             >
