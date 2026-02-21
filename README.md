@@ -109,6 +109,7 @@ The system parses your PDFs, splits them into semantic chunks, generates vector 
 - A **Groq** account ([console.groq.com](https://console.groq.com/keys))
 - A **Supabase** project ([supabase.com](https://supabase.com/))
 - A **HuggingFace** account ([huggingface.co](https://huggingface.co/settings/tokens))
+- OCR fallback uses `tesseract.js` + `canvas` and may require native build tools.
 
 ### 1. Clone the Repository
 
@@ -157,11 +158,13 @@ Run the following SQL in your Supabase SQL Editor to create the required tables 
 -- Enable pgvector extension
 create extension if not exists vector;
 
--- Documents table
+-- Documents table (per-user)
 create table if not exists documents (
   id uuid primary key default gen_random_uuid(),
+  user_id uuid not null,
   filename text not null,
   original_name text not null,
+  storage_path text,
   total_pages integer default 0,
   total_chunks integer default 0,
   status text default 'processing' check (status in ('processing', 'ready', 'error')),
@@ -173,6 +176,7 @@ create table if not exists documents (
 create table if not exists document_chunks (
   id uuid primary key default gen_random_uuid(),
   document_id uuid references documents(id) on delete cascade,
+  user_id uuid not null,
   content text not null,
   page_number integer not null,
   chunk_index integer not null,
@@ -181,17 +185,30 @@ create table if not exists document_chunks (
   created_at timestamptz default now()
 );
 
+-- Ingest jobs for background indexing
+create table if not exists ingest_jobs (
+  id uuid primary key default gen_random_uuid(),
+  document_id uuid references documents(id) on delete cascade,
+  user_id uuid not null,
+  storage_path text not null,
+  status text default 'queued' check (status in ('queued', 'processing', 'completed', 'failed')),
+  error_message text,
+  created_at timestamptz default now(),
+  updated_at timestamptz default now()
+);
+
 -- IVFFlat index for fast similarity search
 create index if not exists document_chunks_embedding_idx
   on document_chunks using ivfflat (embedding vector_cosine_ops)
   with (lists = 100);
 
--- RPC function for similarity search
+-- RPC function for similarity search (scoped by user)
 create or replace function match_documents(
   query_embedding text,
   match_threshold float default 0.3,
   match_count int default 8,
-  filter_document_ids uuid[] default null
+  filter_document_ids uuid[] default null,
+  filter_user_id uuid default null
 )
 returns table (
   id uuid,
@@ -217,11 +234,47 @@ begin
   from document_chunks dc
   where
     (filter_document_ids is null or dc.document_id = any(filter_document_ids))
+    and (filter_user_id is null or dc.user_id = filter_user_id)
     and 1 - (dc.embedding <=> query_embedding::vector) > match_threshold
   order by dc.embedding <=> query_embedding::vector
   limit match_count;
 end;
 $$;
+```
+
+Create a private Supabase Storage bucket named `documents`.
+
+Optional RLS policies (recommended if you access Supabase directly from the client):
+
+```sql
+alter table documents enable row level security;
+alter table document_chunks enable row level security;
+alter table ingest_jobs enable row level security;
+
+create policy "Users can read own documents" on documents
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own documents" on documents
+  for insert with check (auth.uid() = user_id);
+create policy "Users can update own documents" on documents
+  for update using (auth.uid() = user_id);
+create policy "Users can delete own documents" on documents
+  for delete using (auth.uid() = user_id);
+
+create policy "Users can read own chunks" on document_chunks
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own chunks" on document_chunks
+  for insert with check (auth.uid() = user_id);
+create policy "Users can delete own chunks" on document_chunks
+  for delete using (auth.uid() = user_id);
+
+create policy "Users can read own jobs" on ingest_jobs
+  for select using (auth.uid() = user_id);
+create policy "Users can insert own jobs" on ingest_jobs
+  for insert with check (auth.uid() = user_id);
+create policy "Users can update own jobs" on ingest_jobs
+  for update using (auth.uid() = user_id);
+create policy "Users can delete own jobs" on ingest_jobs
+  for delete using (auth.uid() = user_id);
 ```
 
 ### 5. Run the Application
@@ -235,15 +288,28 @@ This starts both the frontend and backend concurrently:
 - **Frontend:** [http://localhost:5173](http://localhost:5173)
 - **Backend:** [http://localhost:3001](http://localhost:3001)
 
+Background indexing worker:
+
+```bash
+cd server
+npm run worker
+```
+
+The worker pulls queued ingest jobs and processes PDF chunks in the background.
+
 ## API Endpoints
 
 | Method | Endpoint | Description |
 |--------|----------|-------------|
 | `POST` | `/api/upload` | Upload a PDF file (multipart form, field: `pdf`) |
 | `GET` | `/api/documents` | List all uploaded documents |
+| `GET` | `/api/documents/:id/url` | Get a signed URL for PDF preview |
 | `DELETE` | `/api/documents/:id` | Delete a document and its chunks |
 | `POST` | `/api/chat` | Send a chat query (JSON body: `{ query, documentIds?, conversationHistory? }`) |
+| `POST` | `/api/chat/stream` | Stream a chat response (SSE) |
 | `GET` | `/api/health` | Health check endpoint |
+
+All API requests require `Authorization: Bearer <supabase_access_token>`.
 
 ### Chat Request Example
 
@@ -278,6 +344,26 @@ This starts both the frontend and backend concurrently:
 ## Project Structure
 
 ```
+
+## Mobile App (React Native)
+
+The bare React Native client lives in `ScholarSyncMobile/`.
+
+1. Configure `ScholarSyncMobile/src/config.ts` with your API base URL and Supabase keys.
+2. Install dependencies:
+
+```bash
+cd ScholarSyncMobile
+npm install
+```
+
+3. Run on Android:
+
+```bash
+npm run android
+```
+
+For iOS, open `ScholarSyncMobile/ios/ScholarSyncMobile.xcworkspace` in Xcode and run.
 scholarsync/
 ├── client/                  # React frontend
 │   ├── public/              # Static assets

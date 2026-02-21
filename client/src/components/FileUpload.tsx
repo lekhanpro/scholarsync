@@ -10,9 +10,21 @@ interface FileUploadProps {
   errors: Map<string, string>;
   onUpload: (files: File[]) => void;
   onDelete: (id: string) => void;
+  selectedIds: string[];
+  onToggleSelect: (id: string) => void;
+  onPreview: (id: string, page?: number) => void;
 }
 
-export default function FileUpload({ documents, uploading, errors, onUpload, onDelete }: FileUploadProps) {
+export default function FileUpload({
+  documents,
+  uploading,
+  errors,
+  onUpload,
+  onDelete,
+  selectedIds,
+  onToggleSelect,
+  onPreview,
+}: FileUploadProps) {
   const onDrop = useCallback((acceptedFiles: File[]) => { onUpload(acceptedFiles); }, [onUpload]);
   const { getRootProps, getInputProps, isDragActive } = useDropzone({
     onDrop, accept: { "application/pdf": [".pdf"] }, maxSize: 50 * 1024 * 1024,
@@ -69,6 +81,13 @@ export default function FileUpload({ documents, uploading, errors, onUpload, onD
             <motion.div key={doc.id} initial={{ opacity: 0, x: -20 }} animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               className="glass-card glass-card-hover rounded-xl px-4 py-3 flex items-center gap-3 group transition-all">
+              <input
+                type="checkbox"
+                checked={selectedIds.includes(doc.id)}
+                onChange={() => onToggleSelect(doc.id)}
+                className="accent-violet-500"
+                disabled={doc.status !== "ready"}
+              />
               <FileText className="w-4 h-4 text-violet-400 flex-shrink-0" />
               <div className="flex-1 min-w-0">
                 <p className="text-sm text-white/80 font-medium truncate">{doc.original_name}</p>
@@ -78,6 +97,12 @@ export default function FileUpload({ documents, uploading, errors, onUpload, onD
                   {doc.error_message && <span className="text-red-400/60"> · {doc.error_message}</span>}
                 </p>
               </div>
+              <button
+                onClick={(e) => { e.stopPropagation(); onPreview(doc.id, 1); }}
+                className="opacity-0 group-hover:opacity-100 transition-opacity px-2 py-1 rounded-lg bg-white/5 text-[10px] text-white/50 hover:text-white/80"
+              >
+                Preview
+              </button>
               {statusIcon(doc.status)}
               <button onClick={(e) => { e.stopPropagation(); onDelete(doc.id); }}
                 className="opacity-0 group-hover:opacity-100 transition-opacity p-1.5 rounded-lg hover:bg-red-500/10">

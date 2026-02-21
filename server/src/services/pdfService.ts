@@ -1,9 +1,16 @@
 import fs from "fs/promises";
 import path from "path";
+import { createCanvas } from "canvas";
+import Tesseract from "tesseract.js";
 
 async function getPdfParse() {
   const module = await import("pdf-parse");
   return module.default || module;
+}
+
+async function getPdfJs() {
+  const module = await import("pdfjs-dist/legacy/build/pdf.mjs");
+  return module;
 }
 
 export interface ParsedPDF {
@@ -21,17 +28,42 @@ export interface PageContent {
   text: string;
 }
 
-export async function parsePDF(filePath: string): Promise<ParsedPDF> {
-  const absolutePath = path.resolve(filePath);
+const OCR_ENABLED = (process.env.OCR_ENABLED || "true").toLowerCase() !== "false";
+const OCR_LANG = process.env.OCR_LANG || "eng";
 
-  try {
-    await fs.access(absolutePath);
-  } catch {
-    throw new Error(`PDF file not found: ${absolutePath}`);
+async function extractTextWithOCR(buffer: Buffer): Promise<ParsedPDF> {
+  const pdfjs = await getPdfJs();
+  const loadingTask = pdfjs.getDocument({ data: buffer });
+  const pdf = await loadingTask.promise;
+
+  const pages: PageContent[] = [];
+  let fullText = "";
+
+  for (let i = 1; i <= pdf.numPages; i++) {
+    const page = await pdf.getPage(i);
+    const viewport = page.getViewport({ scale: 1.6 });
+    const canvas = createCanvas(viewport.width, viewport.height);
+    const context = canvas.getContext("2d");
+
+    await page.render({ canvasContext: context as any, viewport }).promise;
+    const image = canvas.toBuffer("image/png");
+    const result = await Tesseract.recognize(image, OCR_LANG);
+    const text = (result.data.text || "").trim();
+    if (text.length > 0) {
+      pages.push({ pageNumber: i, text });
+      fullText += `\n${text}`;
+    }
   }
 
-  const fileBuffer = await fs.readFile(absolutePath);
+  return {
+    text: fullText.trim(),
+    pages,
+    totalPages: pdf.numPages,
+    metadata: {},
+  };
+}
 
+async function parsePDFFromBuffer(fileBuffer: Buffer): Promise<ParsedPDF> {
   if (fileBuffer.length === 0) {
     throw new Error("PDF file is empty");
   }
@@ -42,6 +74,9 @@ export async function parsePDF(filePath: string): Promise<ParsedPDF> {
     const data = await pdfParse(fileBuffer, { max: 500 });
 
     if (!data.text || data.text.trim().length === 0) {
+      if (OCR_ENABLED) {
+        return extractTextWithOCR(fileBuffer);
+      }
       throw new Error(
         "PDF appears to be scanned/image-based - no extractable text found"
       );
@@ -74,4 +109,21 @@ export async function parsePDF(filePath: string): Promise<ParsedPDF> {
     }
     throw new Error(`Failed to parse PDF: ${error.message}`);
   }
+}
+
+export async function parsePDF(filePath: string): Promise<ParsedPDF> {
+  const absolutePath = path.resolve(filePath);
+
+  try {
+    await fs.access(absolutePath);
+  } catch {
+    throw new Error(`PDF file not found: ${absolutePath}`);
+  }
+
+  const fileBuffer = await fs.readFile(absolutePath);
+  return parsePDFFromBuffer(fileBuffer);
+}
+
+export async function parsePDFBuffer(buffer: Buffer): Promise<ParsedPDF> {
+  return parsePDFFromBuffer(buffer);
 }

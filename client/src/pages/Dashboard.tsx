@@ -6,22 +6,35 @@ import { useFileUpload } from "../hooks/useFileUpload";
 import FileUpload from "../components/FileUpload";
 import ChatMessage from "../components/ChatMessage";
 import LoadingDots from "../components/LoadingDots";
+import DocumentPreview from "../components/DocumentPreview";
+import { capture } from "../lib/posthog";
 
 export default function Dashboard() {
   const { messages, isLoading, send, clearChat } = useChat();
-  const { documents, uploading, errors, upload, removeDocument, fetchDocuments } = useFileUpload();
+  const { documents, uploading, errors, upload, removeDocument, fetchDocuments, getDocumentUrl } = useFileUpload();
   const [input, setInput] = useState("");
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
+  const [previewPage, setPreviewPage] = useState<number>(1);
+  const [filter, setFilter] = useState("");
   const chatEndRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => { fetchDocuments(); }, [fetchDocuments]);
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior: "smooth" }); }, [messages, isLoading]);
+  useEffect(() => {
+    if (selectedIds.length === 0) {
+      setSelectedIds(documents.filter((d) => d.status === "ready").map((d) => d.id));
+    }
+  }, [documents, selectedIds.length]);
 
   const handleSend = () => {
     if (!input.trim() || isLoading) return;
-    const readyDocIds = documents.filter((d) => d.status === "ready").map((d) => d.id);
-    send(input.trim(), readyDocIds.length > 0 ? readyDocIds : undefined);
+    const readySelected = selectedIds.filter((id) =>
+      documents.find((d) => d.id === id && d.status === "ready")
+    );
+    send(input.trim(), readySelected.length > 0 ? readySelected : undefined);
     setInput("");
     if (inputRef.current) inputRef.current.style.height = "auto";
   };
@@ -37,6 +50,27 @@ export default function Dashboard() {
   };
 
   const readyCount = documents.filter((d) => d.status === "ready").length;
+  const filteredDocuments = documents.filter((d) =>
+    d.original_name.toLowerCase().includes(filter.toLowerCase())
+  );
+
+  const handleToggleSelect = (id: string) => {
+    setSelectedIds((prev) => (prev.includes(id) ? prev.filter((i) => i !== id) : [...prev, id]));
+  };
+
+  const handlePreview = async (id: string, page = 1) => {
+    const url = await getDocumentUrl(id);
+    setPreviewUrl(url);
+    setPreviewPage(page);
+    capture("document_preview", { document_id: id, page });
+  };
+
+  const handleOpenSource = (filename: string, page: number) => {
+    const doc = documents.find((d) => d.original_name === filename || d.filename === filename);
+    if (doc) {
+      handlePreview(doc.id, page);
+    }
+  };
 
   return (
     <div className="h-screen flex pt-[76px]">
@@ -56,7 +90,24 @@ export default function Dashboard() {
                 </button>
               </div>
               <div className="flex-1 overflow-y-auto">
-                <FileUpload documents={documents} uploading={uploading} errors={errors} onUpload={upload} onDelete={removeDocument} />
+                <div className="mb-3">
+                  <input
+                    className="w-full rounded-xl bg-white/5 border border-white/10 px-3 py-2 text-xs text-white/70 outline-none focus:border-violet-500/30"
+                    placeholder="Filter documents..."
+                    value={filter}
+                    onChange={(e) => setFilter(e.target.value)}
+                  />
+                </div>
+                <FileUpload
+                  documents={filteredDocuments}
+                  uploading={uploading}
+                  errors={errors}
+                  onUpload={upload}
+                  onDelete={removeDocument}
+                  selectedIds={selectedIds}
+                  onToggleSelect={handleToggleSelect}
+                  onPreview={handlePreview}
+                />
               </div>
             </div>
           </motion.aside>
@@ -107,7 +158,9 @@ export default function Dashboard() {
             </div>
           ) : (
             <div className="max-w-3xl mx-auto space-y-6">
-              {messages.map((msg) => (<ChatMessage key={msg.id} message={msg} />))}
+              {messages.map((msg) => (
+                <ChatMessage key={msg.id} message={msg} onOpenSource={handleOpenSource} />
+              ))}
               {isLoading && (
                 <div className="flex gap-4">
                   <div className="w-9 h-9 rounded-xl bg-gradient-to-br from-violet-600 to-indigo-600 flex items-center justify-center flex-shrink-0">
@@ -138,6 +191,14 @@ export default function Dashboard() {
           </div>
         </div>
       </main>
+
+      {previewUrl && (
+        <DocumentPreview
+          url={previewUrl}
+          initialPage={previewPage}
+          onClose={() => setPreviewUrl(null)}
+        />
+      )}
     </div>
   );
 }

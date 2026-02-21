@@ -1,6 +1,7 @@
-import { useState, useCallback } from "react";
-import { uploadPDF, getDocuments, deleteDocument } from "../services/api";
+import { useState, useCallback, useEffect } from "react";
+import { uploadPDF, getDocuments, deleteDocument, getDocumentUrl } from "../services/api";
 import type { Document } from "../types";
+import { capture } from "../lib/posthog";
 
 export function useFileUpload() {
   const [documents, setDocuments] = useState<Document[]>([]);
@@ -16,6 +17,15 @@ export function useFileUpload() {
     }
   }, []);
 
+  useEffect(() => {
+    const interval = setInterval(() => {
+      if (documents.some((d) => d.status === "processing")) {
+        fetchDocuments();
+      }
+    }, 5000);
+    return () => clearInterval(interval);
+  }, [documents, fetchDocuments]);
+
   const upload = useCallback(async (files: File[]) => {
     for (const file of files) {
       if (file.type !== "application/pdf") {
@@ -27,6 +37,7 @@ export function useFileUpload() {
       try {
         const result = await uploadPDF(file);
         setDocuments((prev) => [result.document, ...prev]);
+        capture("document_upload_client", { file_name: file.name, file_size: file.size });
       } catch (err: any) {
         setErrors((prev) => new Map(prev).set(file.name, err.message));
       } finally {
@@ -39,10 +50,11 @@ export function useFileUpload() {
     try {
       await deleteDocument(id);
       setDocuments((prev) => prev.filter((d) => d.id !== id));
+      capture("document_delete_client", { document_id: id });
     } catch (err: any) {
       console.error("Failed to delete:", err.message);
     }
   }, []);
 
-  return { documents, uploading, errors, upload, removeDocument, fetchDocuments };
+  return { documents, uploading, errors, upload, removeDocument, fetchDocuments, getDocumentUrl };
 }

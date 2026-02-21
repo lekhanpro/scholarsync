@@ -1,11 +1,13 @@
 export interface Document {
   id: string;
+  user_id?: string;
   filename: string;
   original_name: string;
   total_pages: number;
   total_chunks: number;
   status: "processing" | "ready" | "error";
   error_message?: string;
+  storage_path?: string;
   created_at: string;
 }
 

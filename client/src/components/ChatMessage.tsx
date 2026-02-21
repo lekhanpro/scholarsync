@@ -4,9 +4,12 @@ import { Bot, User } from "lucide-react";
 import SourceBadge from "./SourceBadge";
 import type { ChatMessage as ChatMessageType } from "../types";
 
-interface ChatMessageProps { message: ChatMessageType; }
+interface ChatMessageProps {
+  message: ChatMessageType;
+  onOpenSource?: (filename: string, page: number) => void;
+}
 
-export default function ChatMessage({ message }: ChatMessageProps) {
+export default function ChatMessage({ message, onOpenSource }: ChatMessageProps) {
   const isUser = message.role === "user";
   return (
     <motion.div initial={{ opacity: 0, y: 16, scale: 0.98 }} animate={{ opacity: 1, y: 0, scale: 1 }}
@@ -31,7 +34,9 @@ export default function ChatMessage({ message }: ChatMessageProps) {
           <div className="mt-4 pt-3 border-t border-white/5">
             <p className="text-[10px] text-white/30 uppercase tracking-wider font-semibold mb-2">Sources</p>
             <div className="flex flex-wrap gap-2">
-              {message.sources.map((source, i) => (<SourceBadge key={i} source={source} index={i} />))}
+              {message.sources.map((source, i) => (
+                <SourceBadge key={i} source={source} index={i} onOpen={onOpenSource} />
+              ))}
             </div>
           </div>
         )}

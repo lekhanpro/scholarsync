@@ -1,6 +1,7 @@
 import { useState, useCallback } from "react";
-import { sendChatMessage } from "../services/api";
+import { sendChatMessageStream } from "../services/api";
 import type { ChatMessage } from "../types";
+import { capture } from "../lib/posthog";
 
 let messageCounter = 0;
 
@@ -17,12 +18,35 @@ export function useChat() {
     setIsLoading(true);
     try {
       const history = messages.slice(-6).map((m) => ({ role: m.role, content: m.content }));
-      const response = await sendChatMessage(query, documentIds, history);
+      const assistantId = `msg-${++messageCounter}`;
       const assistantMessage: ChatMessage = {
-        id: `msg-${++messageCounter}`, role: "assistant", content: response.answer,
-        sources: response.sources, model: response.model, timestamp: new Date(),
+        id: assistantId, role: "assistant", content: "", timestamp: new Date(),
       };
       setMessages((prev) => [...prev, assistantMessage]);
+
+      await sendChatMessageStream(
+        query,
+        documentIds,
+        history,
+        (token) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, content: m.content + token } : m
+            )
+          );
+        },
+        ({ sources, model }) => {
+          setMessages((prev) =>
+            prev.map((m) =>
+              m.id === assistantId ? { ...m, sources, model } : m
+            )
+          );
+        }
+      );
+      capture("chat_completed", {
+        document_ids: documentIds?.length || 0,
+        tokens_received: 1,
+      });
     } catch (err: any) {
       const errorMessage: ChatMessage = {
         id: `msg-${++messageCounter}`, role: "assistant",
