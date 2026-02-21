@@ -364,6 +364,38 @@ npm run android
 ```
 
 For iOS, open `ScholarSyncMobile/ios/ScholarSyncMobile.xcworkspace` in Xcode and run.
+
+## Deploy to Render
+
+This repo includes a Render Blueprint in `render.yaml` that provisions:
+- `scholarsync-web` (web service)
+- `scholarsync-worker` (background ingest worker)
+
+### Steps
+1. Render Dashboard → **New** → **Blueprint**
+2. Select the `lekhanpro/scholarsync` repo (branch `main`)
+3. Set required environment variables (below), then deploy.
+
+### Required Environment Variables
+
+**Both services**
+- `SUPABASE_URL`
+- `SUPABASE_ANON_KEY`
+- `SUPABASE_SERVICE_ROLE_KEY`
+- `SUPABASE_STORAGE_BUCKET` (e.g. `documents`)
+- `HF_API_KEY`
+- `GROQ_API_KEY`
+- `POSTHOG_KEY`
+- `POSTHOG_HOST` (default `https://app.posthog.com`)
+
+**Web service (build-time)**
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_POSTHOG_KEY`
+- `VITE_POSTHOG_HOST`
+
+**Web service (runtime)**
+- `CLIENT_URL` (set to your Render URL after first deploy, then redeploy)
 scholarsync/
 ├── client/                  # React frontend
 │   ├── public/              # Static assets
