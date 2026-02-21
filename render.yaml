@@ -3,7 +3,7 @@ services:
     name: scholarsync-web
     env: node
     plan: free
-    buildCommand: npm install --legacy-peer-deps && npm run build
+    buildCommand: npm install --legacy-peer-deps && cd client && npm install --legacy-peer-deps && cd ../server && npm install --legacy-peer-deps && cd .. && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
     autoDeploy: true
