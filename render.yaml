@@ -3,13 +3,15 @@ services:
     name: scholarsync-web
     env: node
     plan: free
-    buildCommand: npm install --legacy-peer-deps && cd client && npm install --legacy-peer-deps && cd ../server && npm install --legacy-peer-deps && cd .. && npm run build
+    buildCommand: npm install --legacy-peer-deps --include=dev && cd client && npm install --legacy-peer-deps --include=dev && cd ../server && npm install --legacy-peer-deps --include=dev && cd .. && npm run build
     startCommand: npm run start
     healthCheckPath: /api/health
     autoDeploy: true
     envVars:
       - key: NODE_ENV
         value: production
+      - key: NPM_CONFIG_PRODUCTION
+        value: "false"
       - key: CLIENT_URL
         value: https://your-render-url.onrender.com
       - key: GROQ_API_KEY
