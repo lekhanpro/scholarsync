@@ -142,26 +142,6 @@ export async function createDocumentRecord(
   return data as DocumentRecord;
 }
 
-export async function enqueueIngestJob(
-  userId: string,
-  docId: string,
-  storagePath: string
-): Promise<IngestJob> {
-  const { data, error } = await supabaseAdmin
-    .from("ingest_jobs")
-    .insert({
-      document_id: docId,
-      user_id: userId,
-      storage_path: storagePath,
-      status: "queued",
-    })
-    .select("*")
-    .single();
-
-  if (error) throw new Error(`Failed to create ingest job: ${error.message}`);
-  return data as IngestJob;
-}
-
 export async function processDocumentBuffer(
   docId: string,
   userId: string,
@@ -216,62 +196,7 @@ export async function processDocumentBuffer(
   }
 }
 
-export async function processIngestJob(jobId: string): Promise<void> {
-  const { data: job, error } = await supabaseAdmin
-    .from("ingest_jobs")
-    .select("*")
-    .eq("id", jobId)
-    .single();
-
-  if (error || !job) {
-    throw new Error(`Ingest job not found: ${error?.message || jobId}`);
-  }
-
-  if (job.status !== "queued" && job.status !== "processing") {
-    return;
-  }
-
-  await supabaseAdmin
-    .from("ingest_jobs")
-    .update({ status: "processing", updated_at: new Date().toISOString() })
-    .eq("id", jobId);
-
-  try {
-    const { data: fileData, error: downloadError } = await supabaseAdmin.storage
-      .from(STORAGE_BUCKET)
-      .download(job.storage_path);
-
-    if (downloadError || !fileData) {
-      throw new Error(`Failed to download file: ${downloadError?.message}`);
-    }
-
-    const buffer = Buffer.from(await fileData.arrayBuffer());
-    const { data: doc } = await supabaseAdmin
-      .from("documents")
-      .select("original_name")
-      .eq("id", job.document_id)
-      .eq("user_id", job.user_id)
-      .single();
-
-    const originalName = doc?.original_name || job.storage_path.split("/").pop() || "document.pdf";
-    await processDocumentBuffer(job.document_id, job.user_id, originalName, buffer);
-
-    await supabaseAdmin
-      .from("ingest_jobs")
-      .update({ status: "completed", updated_at: new Date().toISOString() })
-      .eq("id", jobId);
-  } catch (error: any) {
-    await supabaseAdmin
-      .from("ingest_jobs")
-      .update({
-        status: "failed",
-        error_message: error.message,
-        updated_at: new Date().toISOString(),
-      })
-      .eq("id", jobId);
-    throw error;
-  }
-}
+// Background worker removed for free hosting. Processing is inline on upload.
 
 export async function searchDocuments(
   userId: string,

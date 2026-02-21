@@ -3,10 +3,9 @@
   "version": "1.0.0",
   "private": true,
   "scripts": {
-    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\" \"npm run dev:worker\"",
+    "dev": "concurrently \"npm run dev:server\" \"npm run dev:client\"",
     "dev:client": "cd client && npm run dev",
     "dev:server": "cd server && npm run dev",
-    "dev:worker": "cd server && npm run worker",
     "build": "cd client && npm run build && cd ../server && npm run build",
     "start": "cd server && npm start"
   },

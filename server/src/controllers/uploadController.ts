@@ -1,7 +1,7 @@
 import { Response } from "express";
 import {
   createDocumentRecord,
-  enqueueIngestJob,
+  processDocumentBuffer,
   listDocuments,
   deleteDocument,
   getSignedDocumentUrl,
@@ -65,7 +65,7 @@ export async function uploadPDF(req: AuthenticatedRequest, res: Response): Promi
     }
 
     const document = await createDocumentRecord(userId, file.originalname, storagePath);
-    const job = await enqueueIngestJob(userId, document.id, storagePath);
+    await processDocumentBuffer(document.id, userId, file.originalname, file.buffer);
     trackEvent(userId, "document_uploaded", {
       document_id: document.id,
       file_name: file.originalname,
@@ -73,9 +73,8 @@ export async function uploadPDF(req: AuthenticatedRequest, res: Response): Promi
     });
 
     res.status(201).json({
-      message: "Document queued for processing",
+      message: "Document processed successfully",
       document,
-      job,
     });
   } catch (error: any) {
     console.error(`[Upload] Error: ${error.message}`);

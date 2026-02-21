@@ -1,6 +1,6 @@
 import type { VercelRequest, VercelResponse } from "@vercel/node";
 import multer from "multer";
-import { createDocumentRecord, enqueueIngestJob } from "../server/src/services/ragService.js";
+import { createDocumentRecord, processDocumentBuffer } from "../server/src/services/ragService.js";
 import { supabaseAdmin, STORAGE_BUCKET, getUserFromToken } from "../server/src/config/supabase.js";
 
 // Disable Vercel's default body parser so multer can handle multipart
@@ -84,12 +84,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const document = await createDocumentRecord(user.id, file.originalname, storagePath);
-    const job = await enqueueIngestJob(user.id, document.id, storagePath);
+    await processDocumentBuffer(document.id, user.id, file.originalname, file.buffer);
 
     res.status(201).json({
-      message: "Document queued for processing",
+      message: "Document processed successfully",
       document,
-      job,
     });
   } catch (error: any) {
     console.error(`[Upload] Error: ${error.message}`);

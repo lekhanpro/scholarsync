@@ -185,18 +185,6 @@ create table if not exists document_chunks (
   created_at timestamptz default now()
 );
 
--- Ingest jobs for background indexing
-create table if not exists ingest_jobs (
-  id uuid primary key default gen_random_uuid(),
-  document_id uuid references documents(id) on delete cascade,
-  user_id uuid not null,
-  storage_path text not null,
-  status text default 'queued' check (status in ('queued', 'processing', 'completed', 'failed')),
-  error_message text,
-  created_at timestamptz default now(),
-  updated_at timestamptz default now()
-);
-
 -- IVFFlat index for fast similarity search
 create index if not exists document_chunks_embedding_idx
   on document_chunks using ivfflat (embedding vector_cosine_ops)
@@ -249,8 +237,6 @@ Optional RLS policies (recommended if you access Supabase directly from the clie
 ```sql
 alter table documents enable row level security;
 alter table document_chunks enable row level security;
-alter table ingest_jobs enable row level security;
-
 create policy "Users can read own documents" on documents
   for select using (auth.uid() = user_id);
 create policy "Users can insert own documents" on documents
@@ -267,14 +253,6 @@ create policy "Users can insert own chunks" on document_chunks
 create policy "Users can delete own chunks" on document_chunks
   for delete using (auth.uid() = user_id);
 
-create policy "Users can read own jobs" on ingest_jobs
-  for select using (auth.uid() = user_id);
-create policy "Users can insert own jobs" on ingest_jobs
-  for insert with check (auth.uid() = user_id);
-create policy "Users can update own jobs" on ingest_jobs
-  for update using (auth.uid() = user_id);
-create policy "Users can delete own jobs" on ingest_jobs
-  for delete using (auth.uid() = user_id);
 ```
 
 ### 5. Run the Application
@@ -288,14 +266,7 @@ This starts both the frontend and backend concurrently:
 - **Frontend:** [http://localhost:5173](http://localhost:5173)
 - **Backend:** [http://localhost:3001](http://localhost:3001)
 
-Background indexing worker:
-
-```bash
-cd server
-npm run worker
-```
-
-The worker pulls queued ingest jobs and processes PDF chunks in the background.
+PDF ingestion runs inline on upload in the free deployment mode.
 
 ## API Endpoints
 
