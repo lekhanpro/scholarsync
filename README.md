@@ -379,6 +379,7 @@ GitHub Pages hosts only the frontend. API calls must go to a deployed backend UR
 - `VITE_POSTHOG_HOST`
 - `VITE_API_BASE` (example: `https://scholarsync-dun.vercel.app/api`)
 4. Push to `main`; workflow `.github/workflows/pages.yml` deploys automatically
+```
 scholarsync/
 ├── client/                  # React frontend
 │   ├── public/              # Static assets
