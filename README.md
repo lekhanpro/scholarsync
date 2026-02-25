@@ -340,7 +340,6 @@ For iOS, open `ScholarSyncMobile/ios/ScholarSyncMobile.xcworkspace` in Xcode and
 
 This repo includes a Render Blueprint in `render.yaml` that provisions:
 - `scholarsync-web` (web service)
-- `scholarsync-worker` (background ingest worker)
 
 ### Steps
 1. Render Dashboard → **New** → **Blueprint**
@@ -349,7 +348,7 @@ This repo includes a Render Blueprint in `render.yaml` that provisions:
 
 ### Required Environment Variables
 
-**Both services**
+**Web service**
 - `SUPABASE_URL`
 - `SUPABASE_ANON_KEY`
 - `SUPABASE_SERVICE_ROLE_KEY`
@@ -358,15 +357,28 @@ This repo includes a Render Blueprint in `render.yaml` that provisions:
 - `GROQ_API_KEY`
 - `POSTHOG_KEY`
 - `POSTHOG_HOST` (default `https://app.posthog.com`)
-
-**Web service (build-time)**
 - `VITE_SUPABASE_URL`
 - `VITE_SUPABASE_ANON_KEY`
 - `VITE_POSTHOG_KEY`
 - `VITE_POSTHOG_HOST`
+- `VITE_API_BASE` (example: `https://scholarsync-dun.vercel.app/api`)
 
-**Web service (runtime)**
 - `CLIENT_URL` (set to your Render URL after first deploy, then redeploy)
+
+## Deploy to GitHub Pages
+
+GitHub Pages hosts only the frontend. API calls must go to a deployed backend URL.
+
+### Steps
+1. GitHub repo → **Settings** → **Pages**
+2. Under **Build and deployment**, set **Source** to **GitHub Actions**
+3. In repo **Settings** → **Secrets and variables** → **Actions**, add:
+- `VITE_SUPABASE_URL`
+- `VITE_SUPABASE_ANON_KEY`
+- `VITE_POSTHOG_KEY`
+- `VITE_POSTHOG_HOST`
+- `VITE_API_BASE` (example: `https://scholarsync-dun.vercel.app/api`)
+4. Push to `main`; workflow `.github/workflows/pages.yml` deploys automatically
 scholarsync/
 ├── client/                  # React frontend
 │   ├── public/              # Static assets

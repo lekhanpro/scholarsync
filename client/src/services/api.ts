@@ -1,7 +1,10 @@
 import type { ChatResponse, Document } from "../types";
 import { supabase } from "../lib/supabase";
 
-const API_BASE = "/api";
+const isGitHubPages = window.location.hostname.endsWith("github.io");
+const API_BASE =
+  import.meta.env.VITE_API_BASE ||
+  (isGitHubPages ? "https://scholarsync-dun.vercel.app/api" : "/api");
 
 async function getAuthToken(): Promise<string | null> {
   const { data } = await supabase.auth.getSession();

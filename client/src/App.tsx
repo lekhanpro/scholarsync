@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route } from "react-router-dom";
+import { BrowserRouter, HashRouter, Routes, Route } from "react-router-dom";
 import GlassLayout from "./components/GlassLayout";
 import Navbar from "./components/Navbar";
 import Landing from "./pages/Landing";
@@ -8,8 +8,11 @@ import { AuthProvider } from "./context/AuthContext";
 import ProtectedRoute from "./components/ProtectedRoute";
 
 export default function App() {
+  const isGitHubPages = window.location.hostname.endsWith("github.io");
+  const Router = isGitHubPages ? HashRouter : BrowserRouter;
+
   return (
-    <BrowserRouter>
+    <Router>
       <AuthProvider>
         <GlassLayout>
           <Navbar />
@@ -20,6 +23,6 @@ export default function App() {
           </Routes>
         </GlassLayout>
       </AuthProvider>
-    </BrowserRouter>
+    </Router>
   );
 }
