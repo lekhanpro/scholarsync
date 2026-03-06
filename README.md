@@ -29,9 +29,9 @@ The system parses your PDFs, splits them into semantic chunks, generates vector 
 ## Features
 
 - **Multi-PDF Upload** -- Drag and drop multiple lecture notes, textbooks, and papers. Each PDF is parsed and indexed automatically.
-- **Semantic Search** -- Documents are chunked with LangChain's RecursiveCharacterTextSplitter and embedded into 384-dimensional vectors for meaning-based retrieval.
-- **Cross-Document Queries** -- Ask questions that span multiple documents. Compare definitions, synthesize information, and find connections across your entire library.
-- **Cited Answers** -- Every response includes source citations with the exact filename and page number, so you can verify and dive deeper.
+- **Hybrid Retrieval Pipeline** -- Retrieval combines multi-query vector search, lightweight lexical fusion, and MMR-style context selection for better recall and less duplicate evidence.
+- **Cross-Document Queries** -- Ask questions that span multiple documents. Follow-up questions are rewritten into standalone search queries when needed so retrieval stays anchored across turns.
+- **Grounded Citations** -- Every response is grounded in curated source blocks with stable `[S1]`, `[S2]` prompt citations backed by deduped filename/page sources.
 - **Groq-Powered Speed** -- Answers generated in under 2 seconds using LLaMA 3.3 70B on Groq's inference engine.
 - **Conversation History** -- Multi-turn chat that maintains context across questions for natural follow-up queries.
 - **Modern UI** -- Glassmorphism design with smooth Framer Motion animations, dark mode, and responsive layout.
@@ -68,13 +68,13 @@ The system parses your PDFs, splits them into semantic chunks, generates vector 
        |                                 v
        |                           Store in Supabase pgvector
        |
-       |--- POST /api/chat ------> Embed Query (HuggingFace)
+       |--- POST /api/chat ------> Query Rewrite + Expansion (Groq)
        |                                 |
        |                                 v
-       |                           Similarity Search (pgvector)
+       |                      Hybrid Retrieval + Fusion (pgvector + lexical)
        |                                 |
        |                                 v
-       |                           Generate Answer (Groq LLaMA 3.3 70B)
+       |                    Diverse Context Packing + Grounded Answer (Groq)
        |                                 |
        |                                 v
        |                           Return cited response
@@ -146,6 +146,7 @@ cp .env.example .env
 | `SUPABASE_ANON_KEY` | Supabase anonymous/public key | Supabase Dashboard > Settings > API |
 | `SUPABASE_SERVICE_ROLE_KEY` | Supabase service role key (server-side) | Supabase Dashboard > Settings > API |
 | `HF_API_KEY` | HuggingFace Inference API token | [huggingface.co/settings/tokens](https://huggingface.co/settings/tokens) |
+| `RAG_*` | Optional retrieval/chunking tuning knobs (see `.env.example`) | Optional |
 | `PORT` | Server port (default: `3001`) | Optional |
 | `NODE_ENV` | Environment (`development` or `production`) | Optional |
 | `CLIENT_URL` | Frontend URL for CORS in production | Required for production |
@@ -180,7 +181,7 @@ create table if not exists document_chunks (
   content text not null,
   page_number integer not null,
   chunk_index integer not null,
-  metadata jsonb default '{}',
+  metadata jsonb default '{}', -- stores source metadata such as section hints, offsets, and neighbor links
   embedding vector(384),
   created_at timestamptz default now()
 );
@@ -470,3 +471,4 @@ Built by [lekhanpro](https://github.com/lekhanpro)
 If this project helped you, consider giving it a star on GitHub.
 
 </div>
+

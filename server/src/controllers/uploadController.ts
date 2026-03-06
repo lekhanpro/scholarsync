@@ -65,7 +65,13 @@ export async function uploadPDF(req: AuthenticatedRequest, res: Response): Promi
     }
 
     const document = await createDocumentRecord(userId, file.originalname, storagePath);
-    await processDocumentBuffer(document.id, userId, file.originalname, file.buffer);
+    const processedDocument = await processDocumentBuffer(
+      document.id,
+      userId,
+      file.originalname,
+      file.buffer
+    );
+
     trackEvent(userId, "document_uploaded", {
       document_id: document.id,
       file_name: file.originalname,
@@ -74,7 +80,7 @@ export async function uploadPDF(req: AuthenticatedRequest, res: Response): Promi
 
     res.status(201).json({
       message: "Document processed successfully",
-      document,
+      document: processedDocument,
     });
   } catch (error: any) {
     console.error(`[Upload] Error: ${error.message}`);

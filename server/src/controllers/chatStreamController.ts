@@ -1,6 +1,7 @@
 import { Response } from "express";
 import type { AuthenticatedRequest } from "../middleware/auth.js";
 import { ragChatStream } from "../services/ragService.js";
+import { GROQ_MODEL } from "../config/groq.js";
 
 export async function chatStream(req: AuthenticatedRequest, res: Response): Promise<void> {
   try {
@@ -21,7 +22,7 @@ export async function chatStream(req: AuthenticatedRequest, res: Response): Prom
     res.setHeader("Cache-Control", "no-cache, no-transform");
     res.setHeader("Connection", "keep-alive");
 
-    const { sources, stream } = await ragChatStream(
+    const { stream, sourcesPromise } = await ragChatStream(
       userId,
       query.trim(),
       documentIds,
@@ -32,8 +33,9 @@ export async function chatStream(req: AuthenticatedRequest, res: Response): Prom
       res.write(`data: ${JSON.stringify({ token })}\n\n`);
     }
 
+    const sources = await sourcesPromise;
     res.write(
-      `data: ${JSON.stringify({ done: true, sources, model: "llama-3.3-70b-versatile" })}\n\n`
+      `data: ${JSON.stringify({ done: true, sources, model: GROQ_MODEL })}\n\n`
     );
     res.end();
   } catch (error: any) {

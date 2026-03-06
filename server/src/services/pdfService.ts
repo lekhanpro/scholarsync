@@ -20,12 +20,14 @@ export interface ParsedPDF {
   metadata: {
     title?: string;
     author?: string;
+    extractionMethod: "text" | "ocr";
   };
 }
 
 export interface PageContent {
   pageNumber: number;
   text: string;
+  extractionMethod?: "text" | "ocr";
 }
 
 const OCR_ENABLED = (process.env.OCR_ENABLED || "true").toLowerCase() !== "false";
@@ -39,7 +41,7 @@ async function extractTextWithOCR(buffer: Buffer): Promise<ParsedPDF> {
   const pages: PageContent[] = [];
   let fullText = "";
 
-  for (let i = 1; i <= pdf.numPages; i++) {
+  for (let i = 1; i <= pdf.numPages; i += 1) {
     const page = await pdf.getPage(i);
     const viewport = page.getViewport({ scale: 1.6 });
     const canvas = createCanvas(viewport.width, viewport.height);
@@ -48,9 +50,9 @@ async function extractTextWithOCR(buffer: Buffer): Promise<ParsedPDF> {
     await page.render({ canvasContext: context as any, viewport }).promise;
     const image = canvas.toBuffer("image/png");
     const result = await Tesseract.recognize(image, OCR_LANG);
-    const text = (result.data.text || "").trim();
+    const text = normalizeExtractedText(result.data.text || "");
     if (text.length > 0) {
-      pages.push({ pageNumber: i, text });
+      pages.push({ pageNumber: i, text, extractionMethod: "ocr" });
       fullText += `\n${text}`;
     }
   }
@@ -59,7 +61,9 @@ async function extractTextWithOCR(buffer: Buffer): Promise<ParsedPDF> {
     text: fullText.trim(),
     pages,
     totalPages: pdf.numPages,
-    metadata: {},
+    metadata: {
+      extractionMethod: "ocr",
+    },
   };
 }
 
@@ -72,35 +76,40 @@ async function parsePDFFromBuffer(fileBuffer: Buffer): Promise<ParsedPDF> {
 
   try {
     const data = await pdfParse(fileBuffer, { max: 500 });
+    const normalizedDocumentText = normalizeExtractedText(data.text || "");
 
-    if (!data.text || data.text.trim().length === 0) {
+    if (!normalizedDocumentText) {
       if (OCR_ENABLED) {
         return extractTextWithOCR(fileBuffer);
       }
-      throw new Error(
-        "PDF appears to be scanned/image-based - no extractable text found"
-      );
+      throw new Error("PDF appears to be scanned/image-based - no extractable text found");
     }
 
-    const rawPages = data.text.split(/\f/);
+    const rawPages = (data.text || "").split(/\f/);
     const pages: PageContent[] = rawPages
       .map((pageText: string, index: number) => ({
         pageNumber: index + 1,
-        text: pageText.trim(),
+        text: normalizeExtractedText(pageText),
+        extractionMethod: "text" as const,
       }))
       .filter((page: PageContent) => page.text.length > 20);
 
     if (pages.length === 0) {
-      pages.push({ pageNumber: 1, text: data.text.trim() });
+      pages.push({
+        pageNumber: 1,
+        text: normalizedDocumentText,
+        extractionMethod: "text",
+      });
     }
 
     return {
-      text: data.text,
+      text: normalizedDocumentText,
       pages,
       totalPages: data.numpages || pages.length,
       metadata: {
         title: data.info?.Title || undefined,
         author: data.info?.Author || undefined,
+        extractionMethod: "text",
       },
     };
   } catch (error: any) {
@@ -109,6 +118,16 @@ async function parsePDFFromBuffer(fileBuffer: Buffer): Promise<ParsedPDF> {
     }
     throw new Error(`Failed to parse PDF: ${error.message}`);
   }
+}
+
+function normalizeExtractedText(text: string): string {
+  return text
+    .replace(/\r/g, "\n")
+    .replace(/[\t\f\v]+/g, " ")
+    .replace(/[ ]{2,}/g, " ")
+    .replace(/\n{3,}/g, "\n\n")
+    .replace(/[ \t]+\n/g, "\n")
+    .trim();
 }
 
 export async function parsePDF(filePath: string): Promise<ParsedPDF> {
